@@ -235,11 +235,38 @@ fi
 	-delete 2>/dev/null || true )
 
 # ----------------------------------------------------------------------
-# autoreconf if needed (configure missing or newer than configure.ac).
-# tmux 3.7 ships a configure script in the release tarball so this
-# is usually a no-op. Idempotent — we re-run if upstream bumps ac.
+# Windows: patch configure.ac to bypass CMSG_DATA check.
+#
+# tmux 3.7b's source code does NOT reference CMSG_DATA, HAVE_CMSG_DATA,
+# or XOPEN_DEFINES anywhere (grep confirms — see build-review.md) — the
+# configure-time check is purely vestigial (dates from when HP-UX needed
+# explicit _XOPEN_SOURCE for CMSG_DATA). On MinGW, mingw64's
+# <sys/socket.h> lacks CMSG_DATA (Windows uses WSA_CMSG_DATA), so the
+# check fails and the build aborts.
+#
+# Fix: replace the AC_MSG_ERROR("CMSG_DATA not found") with
+# `found_cmsg_data=yes; XOPEN_DEFINES=""` so configure proceeds. The
+# resulting binary has the same behavior as upstream on Linux/BSD/macOS
+# because the source never reads CMSG_DATA in the first place.
 # ----------------------------------------------------------------------
-if [ ! -x "$SRC/configure" ] || [ "$SRC/configure.ac" -nt "$SRC/configure" ]; then
+case "$OS" in
+msys)
+	if [ -f "$SRC/configure.ac" ] && ! grep -q 'PATCHED: tmux source does not use CMSG_DATA' "$SRC/configure.ac"; then
+		echo "==> patch configure.ac: bypass CMSG_DATA check (Windows/MinGW)"
+		( cd "$SRC" && \
+			sed -i 's|		AC_MSG_ERROR("CMSG_DATA not found")|		# PATCHED: tmux source does not use CMSG_DATA; bypass MinGW check\n		found_cmsg_data=yes; XOPEN_DEFINES=""|' configure.ac \
+			|| { echo "ERROR: failed to patch configure.ac" >&2; exit 1; } )
+	fi
+	;;
+esac
+
+# ----------------------------------------------------------------------
+# autoreconf if needed (configure missing or newer than configure.ac).
+# tmux 3.7b ships a configure script in the release tarball so this
+# is usually a no-op. Idempotent — we re-run if upstream bumps ac.
+# On Windows we always re-run because we patched configure.ac.
+# ----------------------------------------------------------------------
+if [ "$OS" = "msys" ] || [ ! -x "$SRC/configure" ] || [ "$SRC/configure.ac" -nt "$SRC/configure" ]; then
 	echo "==> autoreconf -fi in $SRC"
 	( cd "$SRC" && autoreconf -fi )
 fi
