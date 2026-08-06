@@ -53,7 +53,7 @@ Linux builds:
 | `x86_64-linux-musl`    | `ubuntu-latest` + Alpine 3.20 | fully static musl                                  | `.tar.xz` |
 | `aarch64-linux-musl`   | `ubuntu-24.04-arm` + Alpine 3.20 | fully static musl                              | `.tar.xz` |
 | `aarch64-macos`        | `macos-latest`                | static (`-Wl,-force_load` libevent/ncurses); only `/usr/lib/libSystem.B.dylib` linked | `.tar.xz` |
-| `x86_64-macos`         | `macos-latest` (cross from aarch64) | same                                          | `.tar.xz` |
+| `x86_64-macos`         | `macos-13` (native Intel)     | same                                               | `.tar.xz` |
 
 > **Windows is deferred to v0.2.0.** tmux 3.7's `configure.ac`
 > checks for `CMSG_DATA` in `<sys/socket.h>`, which MinGW's headers

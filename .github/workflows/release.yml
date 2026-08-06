@@ -37,7 +37,9 @@ jobs:
           - { target: x86_64-linux-musl,   runner: ubuntu-latest,    os: linux,   libc: musl, docker_arch: amd64 }
           - { target: aarch64-linux-musl,  runner: ubuntu-24.04-arm, os: linux,   libc: musl, docker_arch: arm64 }
           - { target: aarch64-macos,       runner: macos-latest,     os: macos                  }
-          - { target: x86_64-macos,        runner: macos-latest,     os: macos                  }
+          # x86_64-macos: macos-13 (Intel) runner — see build-and-test.yml
+          # matrix comment for why we can't cross-compile from arm64.
+          - { target: x86_64-macos,        runner: macos-13,         os: macos                  }
     env:
       TARGET: ${{ matrix.target }}
     steps:
@@ -60,15 +62,12 @@ jobs:
         if: matrix.libc == 'musl'
         run: docker run --rm --platform linux/${{ matrix.docker_arch }} -v "$PWD":/w -w /w alpine:3.20 sh -c 'apk add --no-cache bash >/dev/null && bash /w/scripts/build-alpine.sh && bash /w/scripts/smoke.sh'
 
-      - name: Build (macOS aarch64 — host)
-        if: matrix.os == 'macos' && matrix.target == 'aarch64-macos'
+      - name: Build (macOS aarch64 — host on macos-latest)
+        if: matrix.target == 'aarch64-macos'
         run: bash scripts/build.sh && bash scripts/smoke.sh
 
-      - name: Build (macOS x86_64 — cross from aarch64)
+      - name: Build (macOS x86_64 — host on macos-13)
         if: matrix.target == 'x86_64-macos'
-        env:
-          TMUX_TARGET_ARCH: x86_64
-          TMUX_OS_HINT: darwin
         run: bash scripts/build.sh && bash scripts/smoke.sh
 
       # ---- package ----

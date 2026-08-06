@@ -32,7 +32,6 @@ apk add --no-cache \
 	git \
 	linux-headers \
 	bison \
-	byacc \
 	libevent-dev \
 	libevent-static \
 	ncurses-dev \

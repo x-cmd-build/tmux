@@ -238,15 +238,37 @@ echo "==> configure: $SRC/configure $CONFIGURE_ARGS"
 echo "    CC=${CC:-cc}  CFLAGS=${CFLAGS:-default}  LDFLAGS=${LDFLAGS:-default}"
 ( cd "$BUILD_DIR" && "$SRC/configure" --srcdir="$SRC" $CONFIGURE_ARGS )
 
-# macOS post-process: the libtool wrapper may inject its own -L
-# /usr/lib reference for libevent/ncurses that the brew install doesn't
-# satisfy (since brew installs to /opt/homebrew/lib). Confirm the
-# Makefile actually uses our force_load flags; if not, abort with a
-# clear error.
+# ----------------------------------------------------------------------
+# macOS post-process: strip Homebrew's -L paths and -l flags from the
+# generated Makefile, so libtool can't pull in the .dylib references
+# from /opt/homebrew/{libevent,ncurses}/lib/. Our -Wl,-force_load of
+# the .a archives above already provides every symbol statically.
+#
+# Without this, libtool happily links libevent_core-2.1.7.dylib etc.
+# in addition to our force-loaded libevent.a — producing a binary
+# that depends on Homebrew at runtime. Same pattern as ljh-sh/iperf
+# (which strips -lssl -lcrypto from its Makefiles for the same
+# reason).
+# ----------------------------------------------------------------------
 if [ "$OS" = "darwin" ]; then
 	echo "==> macOS verify: force_load libevent/ncurses present in link flags"
 	grep -q -- "-Wl,-force_load" "$BUILD_DIR/Makefile" \
 		|| { echo "FAIL: -Wl,-force_load not in Makefile; libtool may have stripped it" >&2; exit 1; }
+	echo "==> macOS post-process: strip -L<homebrew> and -l<libevent/ncurses>"
+	( cd "$BUILD_DIR" && \
+		find . -name Makefile -print0 | xargs -0 sed -i '' \
+			-e 's|-L/opt/homebrew/[^ ]*||g' \
+			-e 's|-L/usr/local/[^ ]*||g' \
+			-e 's| -levent_core-2-1-0||g' \
+			-e 's| -levent_extra-2-1-0||g' \
+			-e 's| -levent-2-1-0||g' \
+			-e 's| -levent_core||g' \
+			-e 's| -levent_extra||g' \
+			-e 's| -levent||g' \
+			-e 's| -lncursesw||g' \
+			-e 's| -lncurses||g' \
+			-e 's| -ltinfo||g' \
+	)
 fi
 
 # ----------------------------------------------------------------------

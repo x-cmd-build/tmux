@@ -38,7 +38,12 @@ jobs:
           - { target: x86_64-linux-musl,   runner: ubuntu-latest,    os: linux,   libc: musl, docker_arch: amd64 }
           - { target: aarch64-linux-musl,  runner: ubuntu-24.04-arm, os: linux,   libc: musl, docker_arch: arm64 }
           - { target: aarch64-macos,       runner: macos-latest,     os: macos                  }
-          - { target: x86_64-macos,        runner: macos-latest,     os: macos                  }
+          # x86_64-macos: macos-13 (Intel) runner — Homebrew's
+          # libevent.a / libncurses.a on Apple Silicon are arm64-only;
+          # a cross-compile to x86_64 would link against the wrong-arch
+          # .a archives. macos-13 is x86_64-native, so Homebrew gives
+          # us x86_64 .a files directly.
+          - { target: x86_64-macos,        runner: macos-13,         os: macos                  }
           # x86_64-windows: DEFERRED to v0.2.0 — see scripts/build.sh
           # `msys` branch and NOTICE.md §Windows support.
     env:
@@ -72,14 +77,10 @@ jobs:
         if: matrix.os == 'macos' && matrix.target == 'aarch64-macos'
         run: bash scripts/build.sh && bash scripts/smoke.sh
 
-      # macOS x86_64: cross-compile via clang -arch (Apple SDK is shared).
-      # build.sh auto-derives the triplet `x86_64-apple-darwin` from the
-      # OS hint + target arch.
-      - name: Build (macOS x86_64 — cross from aarch64)
+      # macOS x86_64: NATIVE build on macos-13 (Intel) runner. Homebrew
+      # here ships x86_64 .a archives; no cross-compile needed.
+      - name: Build (macOS x86_64 — host on macos-13)
         if: matrix.target == 'x86_64-macos'
-        env:
-          TMUX_TARGET_ARCH: x86_64
-          TMUX_OS_HINT: darwin
         run: bash scripts/build.sh && bash scripts/smoke.sh
 
       # ---- package ----
