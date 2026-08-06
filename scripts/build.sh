@@ -289,12 +289,12 @@ msys)
 		echo "==> patch tmux source: libevent callback fd type int → evutil_socket_t"
 		( cd "$SRC" && \
 			find . -name '*.c' -print0 | xargs -0 sed -i \
-				-e 's/\bint fd, short events, void \*arg\b/evutil_socket_t fd, short events, void *arg/g' \
-				-e 's/\bint fd, __unused short events, void \*arg\b/evutil_socket_t fd, __unused short events, void *arg/g' \
-				-e 's/\b__unused int fd, short events, void \*arg\b/__unused evutil_socket_t fd, short events, void *arg/g' \
-				-e 's/\b__unused int fd, __unused short events, void \*arg\b/__unused evutil_socket_t fd, __unused short events, void *arg/g' \
-				-e 's/\b__unused int fd, __unused short events, __unused void \*arg\b/__unused evutil_socket_t fd, __unused short events, __unused void *arg/g' \
-				-e 's/\bint, short, void \*\b/evutil_socket_t, short, void */g' \
+				-e 's/int fd, short events, void \*arg/evutil_socket_t fd, short events, void *arg/g' \
+				-e 's/int fd, __unused short events, void \*arg/evutil_socket_t fd, __unused short events, void *arg/g' \
+				-e 's/__unused int fd, short events, void \*arg/__unused evutil_socket_t fd, short events, void *arg/g' \
+				-e 's/__unused int fd, __unused short events, void \*arg/__unused evutil_socket_t fd, __unused short events, void *arg/g' \
+				-e 's/__unused int fd, __unused short events, __unused void \*arg/__unused evutil_socket_t fd, __unused short events, __unused void *arg/g' \
+				-e 's/int, short, void \*/evutil_socket_t, short, void */g' \
 				|| { echo "ERROR: failed to patch tmux source" >&2; exit 1; } \
 			&& touch event_compat_ok.flag )
 	fi
