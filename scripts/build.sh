@@ -266,6 +266,17 @@ msys)
 			sed -i 's|#include <sys/uio.h>|/* PATCHED: tmux source does not use iovec; skip on MinGW */\n#if !defined(_WIN32)\n#include <sys/uio.h>\n#endif|' tmux.h \
 			|| { echo "ERROR: failed to patch tmux.h" >&2; exit 1; } )
 	fi
+	# Patch 2b: mingw-w64's <stdlib.h> defines `environ` as a macro
+	# (e.g. `(*__p_environ())`) that shadows tmux.h's `extern char
+	# **environ;` and `struct environ;`. The macro expansion makes
+	# both declarations invalid. `#undef environ` before tmux.h's
+	# declarations restores the variable / struct tag.
+	if [ -f "$SRC/tmux.h" ] && ! grep -q 'PATCHED: undef environ for MinGW' "$SRC/tmux.h"; then
+		echo "==> patch tmux.h: undef environ (Windows/MinGW)"
+		( cd "$SRC" && \
+			sed -i 's|^extern char   \*\*environ;|/* PATCHED: undef environ for MinGW */\n#ifdef environ\n#undef environ\n#endif\nextern char   **environ;|' tmux.h \
+			|| { echo "ERROR: failed to patch tmux.h" >&2; exit 1; } )
+	fi
 
 	# Patch 3: provide compat shim headers for MinGW. MinGW's
 	# mingw-w64-headers has been dropping POSIX/BSD compat headers
