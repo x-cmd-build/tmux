@@ -277,6 +277,27 @@ msys)
 			sed -i 's|^extern char   \*\*environ;|/* PATCHED: undef environ for MinGW */\n#ifdef environ\n#undef environ\n#endif\nextern char   **environ;|' tmux.h \
 			|| { echo "ERROR: failed to patch tmux.h" >&2; exit 1; } )
 	fi
+	# Patch 2c: libevent 2.1's event_set/event_once callbacks expect
+	# `evutil_socket_t` for the fd parameter. On Windows, evutil_socket_t
+	# is SOCKET (pointer-width unsigned int); on POSIX, it's int.
+	# tmux 3.7b's source uses `int` everywhere, which mismatches the
+	# libevent 2.1 callback signature on Windows MSYS2 build. Sed-replace
+	# all `int fd` libevent callback signatures to evutil_socket_t.
+	# The `__unused` annotations are preserved; the unused warning
+	# in libevent callbacks is still accurate.
+	if [ ! -f "$SRC/event_compat_ok.flag" ]; then
+		echo "==> patch tmux source: libevent callback fd type int → evutil_socket_t"
+		( cd "$SRC" && \
+			find . -name '*.c' -print0 | xargs -0 sed -i \
+				-e 's/\bint fd, short events, void \*arg\b/evutil_socket_t fd, short events, void *arg/g' \
+				-e 's/\bint fd, __unused short events, void \*arg\b/evutil_socket_t fd, __unused short events, void *arg/g' \
+				-e 's/\b__unused int fd, short events, void \*arg\b/__unused evutil_socket_t fd, short events, void *arg/g' \
+				-e 's/\b__unused int fd, __unused short events, void \*arg\b/__unused evutil_socket_t fd, __unused short events, void *arg/g' \
+				-e 's/\b__unused int fd, __unused short events, __unused void \*arg\b/__unused evutil_socket_t fd, __unused short events, __unused void *arg/g' \
+				-e 's/\bint, short, void \*\b/evutil_socket_t, short, void */g' \
+				|| { echo "ERROR: failed to patch tmux source" >&2; exit 1; } \
+			&& touch event_compat_ok.flag )
+	fi
 
 	# Patch 3: provide compat shim headers for MinGW. MinGW's
 	# mingw-w64-headers has been dropping POSIX/BSD compat headers
