@@ -257,6 +257,13 @@ MAKE_AUTOTOOLS_STUB="AUTOMAKE=true AUTOCONF=true ACLOCAL=true AUTOHEADER=true"
 
 mkdir -p "$BUILD_DIR"
 
+# tmux uses AC_CONFIG_LIBOBJ_DIR(compat) — the Makefile writes
+# compat/closefrom.o, compat/freezero.o, etc. relative to the build
+# dir, but `make` doesn't auto-create the subdir. Create it before
+# invoking configure so the rule at Makefile:930 can write its
+# outputs. Empty files are fine — they're just directory placeholders.
+mkdir -p "$BUILD_DIR/compat"
+
 echo "==> configure: $SRC/configure $CONFIGURE_ARGS"
 echo "    CC=${CC:-cc}  CFLAGS=${CFLAGS:-default}  LDFLAGS=${LDFLAGS:-default}"
 ( cd "$BUILD_DIR" && "$SRC/configure" --srcdir="$SRC" $CONFIGURE_ARGS )
