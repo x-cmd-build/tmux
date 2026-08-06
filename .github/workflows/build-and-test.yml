@@ -88,6 +88,22 @@ jobs:
           arch -x86_64 /usr/local/bin/brew install bash autoconf automake libtool pkg-config
           arch -x86_64 /usr/local/bin/brew install libevent ncurses
 
+      - name: Install deps (Windows MSYS2 + mingw64 + libevent/ncurses)
+        if: matrix.os == 'windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            git
+            base-devel
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-autotools
+            mingw-w64-x86_64-libevent
+            mingw-w64-x86_64-ncurses
+            mingw-w64-x86_64-pkg-config
+            mingw-w64-x86_64-gettext
+
       # ---- build + smoke ----
       # Musl: a single Alpine `docker run` does build + smoke.
       # Alpine's apk brings build-base, bash, bison, libevent-dev +
