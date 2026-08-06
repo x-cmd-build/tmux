@@ -232,6 +232,23 @@ if [ ! -x "$SRC/configure" ] || [ "$SRC/configure.ac" -nt "$SRC/configure" ]; th
 	( cd "$SRC" && autoreconf -fi )
 fi
 
+# ----------------------------------------------------------------------
+# Suppress make's autotools regeneration rules.
+# Vendored configure.ac + Makefile.am often have newer timestamps
+# than the generated aclocal.m4 + Makefile.in (the tarball `make
+# dist` regenerates them in a different order than they're consumed).
+# `make` then tries to run aclocal-1.15 / automake-1.15, which aren't
+# installed in CI images — error 127.
+#
+# Touch the generated files so make's regeneration rules see them as
+# fresh and skip the rebuild. Same pattern as ljh-sh/gawk.
+# ----------------------------------------------------------------------
+echo "==> touch: stamp aclocal.m4 + Makefile.in to suppress autotools regen"
+( cd "$SRC" \
+	&& touch -r configure.ac aclocal.m4 2>/dev/null || touch aclocal.m4 \
+	&& touch -r Makefile.am Makefile.in configure config.h.in 2>/dev/null \
+	|| true )
+
 mkdir -p "$BUILD_DIR"
 
 echo "==> configure: $SRC/configure $CONFIGURE_ARGS"
