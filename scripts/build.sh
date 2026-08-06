@@ -280,11 +280,17 @@ msys)
 	cat > "$COMPAT_INC/sys/uio.h" <<'SHIM'
 /* shim: tmux source does not use iovec */
 SHIM
-	cat > "$COMPAT_INC/sys/tree.h" <<'SHIM'
-/* shim: tmux source does not use RB-tree macros */
-SHIM
+	# sys/queue.h + sys/tree.h: tmux ships its own BSD queue.h / tree.h
+	# in compat/. mingw-w64 doesn't provide them, and tmux's source
+	# uses TAILQ_* / RB_* macros heavily. Forward to tmux's vendored
+	# copies via relative include.
 	cat > "$COMPAT_INC/sys/queue.h" <<'SHIM'
-/* shim: tmux source does not use BSD list macros */
+/* shim: forward to tmux's vendored BSD queue.h. */
+#include "../../../upstream/tmux/compat/queue.h"
+SHIM
+	cat > "$COMPAT_INC/sys/tree.h" <<'SHIM'
+/* shim: forward to tmux's vendored BSD tree.h. */
+#include "../../../upstream/tmux/compat/tree.h"
 SHIM
 	cat > "$COMPAT_INC/sys/param.h" <<'SHIM'
 /* shim */
@@ -317,15 +323,30 @@ struct winsize {
 #define TIOCSWINSZ 0x5414
 #endif
 SHIM
+	# sys/types.h: pass-through to mingw-w64's sys/types.h, but pad
+	# with uid_t/gid_t typedefs that mingw-w64 omits (they're in
+	# Windows RPC headers only). tmux's compat.h uses these for
+	# getpeereid() and similar POSIX stubs.
+	cat > "$COMPAT_INC/sys/types.h" <<'SHIM'
+/* shim: tmux uses uid_t/gid_t; mingw-w64 omits them. Inject typedefs
+ * before pulling in the host's sys/types.h. */
+#ifndef _SYS_TYPES_H_SHIM
+#define _SYS_TYPES_H_SHIM
+typedef unsigned short uid_t;
+typedef unsigned short gid_t;
+#include_next <sys/types.h>
+#endif
+SHIM
 	cat > "$COMPAT_INC/fnmatch.h" <<'SHIM'
-/* shim: tmux compat.h uses fnmatch() */
+/* shim: tmux compat.h uses fnmatch() — values MUST match
+ * scripts/compat-windows.c (same binary, different TUs). */
 #ifndef _FNMATCH_H_SHIM
 #define _FNMATCH_H_SHIM
-#define FNM_NOMATCH 1
-#define FNM_PATHNAME 2
-#define FNM_PERIOD 4
-#define FNM_NOESCAPE 8
-#define FNM_CASEFOLD 16
+#define FNM_NOMATCH  1     /* overlap (no real conflict) */
+#define FNM_PATHNAME 0x01
+#define FNM_NOESCAPE 0x02
+#define FNM_PERIOD   0x04
+#define FNM_CASEFOLD 0x08
 extern int fnmatch(const char *, const char *, int);
 #endif
 SHIM

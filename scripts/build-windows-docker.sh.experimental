@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# build-windows-docker.sh — local convenience wrapper for the docker
+# cross-compile path. Same image, same build steps as the GitHub
+# Actions `windows` job in build-and-test.yml — this is the local
+# fast-iteration path when CI is queued or down.
+#
+# Build:
+#   bash scripts/build-windows-docker.sh
+#
+# Output:
+#   dist/tmux-x86_64-windows/bin/tmux.exe
+#   dist/tmux-x86_64-windows.zip
+#
+# Equivalent to:
+#   docker build -t x-cmd-build/tmux-windows-build docker/
+#   docker run --rm -v $PWD:/src:ro -v $PWD/dist:/dist x-cmd-build/tmux-windows-build \
+#       bash /src/scripts/build-windows-in-docker.sh
+#
+# Implementation: just calls build-windows-in-docker.sh, which is
+# the same script that runs inside the CI container. Single source
+# of truth for build steps.
+
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+DOCKERFILE="$REPO_ROOT/docker/Dockerfile.windows-build"
+IMAGE="x-cmd-build/tmux-windows-build:dev"
+
+cd "$REPO_ROOT"
+
+# Build the image.
+echo "==> docker build (this may take a few minutes on first run)"
+docker build \
+	--platform linux/$(uname -m | sed 's/arm64/aarch64/;s/x86_64/amd64/') \
+	-t "$IMAGE" \
+	-f "$DOCKERFILE" \
+	"$(dirname "$DOCKERFILE")"
+
+# Run the build (same in-container script as CI).
+echo "==> docker run — build tmux.exe"
+mkdir -p "$REPO_ROOT/dist"
+docker run --rm \
+	--platform linux/$(uname -m | sed 's/arm64/aarch64/;s/x86_64/amd64/') \
+	-v "$REPO_ROOT":/src:ro \
+	-v "$REPO_ROOT/dist":/dist \
+	"$IMAGE" \
+	bash /src/scripts/build-windows-in-docker.sh
+
+# Print summary.
+echo
+echo "==> outputs:"
+ls -la "$REPO_ROOT/dist/tmux-x86_64-windows" 2>/dev/null || true
+ls -la "$REPO_ROOT/dist/tmux-x86_64-windows.zip" 2>/dev/null || true

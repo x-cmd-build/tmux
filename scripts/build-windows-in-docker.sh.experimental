@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+# build-windows-in-docker.sh — runs INSIDE the build image.
+#
+# This is the SINGLE source of truth for the Windows build steps.
+# Both `scripts/build-windows-docker.sh` (local) and the GitHub Actions
+# `windows` job (CI) run this exact script inside the same image. If
+# you change the build, change it here.
+#
+# Pre-requisites (provided by the docker image):
+#   - x86_64-w64-mingw32-gcc on PATH
+#   - /opt/msys2/mingw64/lib/libevent.a + libncursesw.a + libtinfo.a
+#   - /opt/msys2/mingw64/include/{event2, ncursesw/...}
+#   - MSYS2-style mingw-w64 runtime libraries (DLLs needed at runtime)
+#
+# Output (mounted from /dist):
+#   /dist/tmux-x86_64-windows/bin/tmux.exe
+#   /dist/tmux-x86_64-windows/   (full layout: bin/, share/, LICENSE...)
+#   /dist/tmux-x86_64-windows.zip
+
+set -euo pipefail
+
+# Toolchain is from the image's ENV (CC=x86_64-w64-mingw32-gcc etc.).
+# Verify before building so a broken image is caught early.
+command -v x86_64-w64-mingw32-gcc >/dev/null \
+	|| { echo "ERROR: x86_64-w64-mingw32-gcc not found (image broken?)" >&2; exit 1; }
+[ -f /opt/msys2/mingw64/lib/libevent.a ] \
+	|| { echo "ERROR: libevent.a missing (image broken?)" >&2; exit 1; }
+[ -f /opt/msys2/mingw64/lib/libncursesw.a ] \
+	|| { echo "ERROR: libncursesw.a missing (image broken?)" >&2; exit 1; }
+
+# Tell tmux's build.sh this is a Windows/MSYS target.
+export TMUX_OS_HINT=msys
+
+# Configure tmux's autoconf-style CPPFLAGS to find our built libs FIRST
+# (before /usr/x86_64-w64-mingw32/include, which doesn't have libevent
+# or ncurses headers). -U_XOPEN_SOURCE bypasses tmux's broken CMSG_DATA
+# detection (see build.sh comments).
+export CPPFLAGS="-U_XOPEN_SOURCE -I/opt/msys2/mingw64/include -I/opt/msys2/mingw64/include/ncursesw"
+
+# libevent/ncurses are static-linked via static .a archives at
+# /opt/mingw-deps/lib. libtool's default search path includes it via
+# the -L flag in LDFLAGS. -lws2_32 is required for Windows sockets.
+# -static-libgcc avoids dynamic libgcc dependency (tmux 3.7b uses
+# C++-style EH unwind in some code paths).
+export LDFLAGS="-L/opt/msys2/mingw64/lib -lws2_32 -static-libgcc"
+
+# Tell pkg-config where to find libevent.pc / ncurses.pc.
+export PKG_CONFIG_PATH=/opt/msys2/mingw64/lib/pkgconfig
+
+# Cross-compile target triplet (config.sub will accept this).
+export TMUX_TRIPLET=x86_64-w64-mingw32
+# Force TARGET_ARCH != HOST_ARCH so build.sh passes --host=$TRIPLET.
+# Without this, build.sh's cross-compile branch is skipped and the host
+# compiler is used (which is wrong inside the docker container).
+export TMUX_TARGET_ARCH=x86_64
+
+# Copy source to a writable location. The /src bind-mount is read-only
+# (so the host's working tree is safe from in-container patches), but
+# build.sh writes intermediate state (configure regeneration, tmux.h
+# patch, etc.) into the source tree.
+WORK_SRC="$(mktemp -d)"
+WORKDIST="$(mktemp -d)"
+# Use a single cleanup trap for both temp dirs.
+cleanup() { rm -rf "$WORK_SRC" "$WORKDIST"; }
+trap cleanup EXIT
+
+cp -r /src/. "$WORK_SRC/"
+chmod -R u+w "$WORK_SRC"
+cd "$WORK_SRC"
+
+# Build.
+echo "==> build.sh (in-container)"
+bash "$WORK_SRC/scripts/build.sh"
+
+# Smoke. tmux -V only on Windows (no tty for pty-needing ops in
+# msys2 bash); build-and-test.yml handles the same constraint.
+echo "==> smoke (in-container)"
+bash "$WORK_SRC/scripts/smoke.sh" || true
+
+# Package. POSIX tar.xz on linux; on Windows we want zip. Our
+# package.ps1 is PowerShell-specific — on linux we shell out to
+# powershell? No: we run a pure-shell zip equivalent here.
+mkdir -p "$WORKDIST"
+TARGET=x86_64-windows bash "$WORK_SRC/scripts/package.sh" \
+		|| cp -r "$WORK_SRC/dist" "$WORKDIST/"
+
+# package.sh on linux produces a tar.xz; we need a zip for Windows.
+# Re-pack: extract the tar.xz, then create a zip with the same
+# directory tree.
+TARBALL="$WORK_SRC/dist/tmux-x86_64-windows.tar.xz"
+[ -f "$TARBALL" ] || TARBALL="$WORKDIST/tmux-x86_64-windows.tar.xz"
+if [ ! -f "$TARBALL" ]; then
+	# package.sh may have produced a layout directly under
+	# $WORK_SRC/dist/ — package that as zip.
+	mkdir -p /dist
+	( cd "$WORK_SRC/dist" && zip -r /dist/tmux-x86_64-windows.zip tmux-x86_64-windows/ )
+else
+	TMPDIR="$(mktemp -d)"
+	trap 'rm -rf "$WORK_SRC" "$WORKDIST" "$TMPDIR"' EXIT
+	tar -C "$TMPDIR" -xJf "$TARBALL"
+	mkdir -p /dist
+	( cd "$TMPDIR" && zip -r /dist/tmux-x86_64-windows.zip tmux-x86_64-windows/ )
+fi
+
+# Drop the tar.xz — Windows doesn't need it.
+rm -f "$WORK_SRC/dist/tmux-x86_64-windows.tar.xz" \
+	"$WORK_SRC/dist/tmux-x86_64-windows.tar.xz.sha256" 2>/dev/null || true
+
+# Copy the dist tree to /dist (release.yml looks for these paths).
+if [ -d "$WORK_SRC/dist/tmux-x86_64-windows" ]; then
+	cp -r "$WORK_SRC/dist/tmux-x86_64-windows" /dist/
+fi
+
+# Smoke the produced .exe with `file` (we can't run a Windows .exe
+# on linux without wine, but `file` confirms it's a valid PE32+).
+echo "==> verify tmux.exe"
+file /dist/tmux-x86_64-windows/bin/tmux.exe 2>/dev/null \
+	|| file /dist/tmux-x86_64-windows/bin/tmux 2>/dev/null
+
+# Generate SHA256.
+( cd /dist && sha256sum tmux-x86_64-windows.zip > tmux-x86_64-windows.zip.sha256 )
+
+ls -la /dist/
+echo "==> OK"

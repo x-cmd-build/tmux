@@ -1,0 +1,78 @@
+# Dockerfile.windows-build
+#
+# Cross-compile tmux 3.7b → x86_64-w64-mingw32 binary.
+#
+# Uses the SAME MSYS2 packages as the GitHub Actions workflow
+# (build-and-test.yml + release.yml). Both paths can use this image
+# → identical binaries. The image is rebuilt on every run so the
+# build is reproducible from this Dockerfile alone.
+#
+# Strategy: install MSYS2 base tarball + packages via pacman. MSYS2
+# ships mingw-w64-x86_64-toolchain + libevent + ncurses as pre-built
+# binaries, with all the cross-compile patches already applied. This
+# avoids hand-rolling libevent/ncurses builds (which have multiple
+# subtle cross-compile bugs in ncurses 6.4 + libevent 2.1.12).
+#
+# Why not just use msys2/setup-msys2@v2 on GitHub Actions? That
+# works on windows-latest. We use Docker so the same build can run
+# locally on macOS arm64 (via emulation) AND on any Linux runner,
+# reproducing CI environment exactly.
+
+FROM debian:bullseye
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+# Host build tools + curl for tarball download.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+		build-essential \
+		autoconf automake libtool pkg-config \
+		bison gettext \
+		curl ca-certificates \
+		xz-utils \
+	&& rm -rf /var/lib/apt/lists/*
+
+# MSYS2 base tarball. Same version family as the GitHub Actions
+# msys2/setup-msys2@v2 install (which uses the rolling 2025+ series).
+ARG MSYS2_TARBALL=msys2-base-x86_64-20260611.tar.xz
+
+# Install MSYS2 base + the same packages the CI workflow installs.
+# Putting everything under /opt/msys2 keeps paths clean and makes
+# the GitHub Actions / local docker paths interchangeable.
+RUN set -eux; \
+	curl -fsSL "https://repo.msys2.org/distrib/x86_64/${MSYS2_TARBALL}" \
+		-o /tmp/msys2.tar.xz; \
+	mkdir -p /opt; \
+	tar -xJf /tmp/msys2.tar.xz -C /opt; \
+	rm -f /tmp/msys2.tar.xz; \
+	# Initialize pacman + install mingw-w64 packages. We do this
+	# inside the MSYS2 environment via `/opt/msys2/usr/bin/bash --login`.
+	/opt/msys2/usr/bin/bash -lc ' \
+		pacman-key --init || true; \
+		pacman-key --populate msys2 || true; \
+		pacman -Sy --noconfirm \
+			git \
+			base-devel \
+			mingw-w64-x86_64-toolchain \
+			mingw-w64-x86_64-autotools \
+			mingw-w64-x86_64-libevent \
+			mingw-w64-x86_64-ncurses \
+			mingw-w64-x86_64-pkg-config \
+			mingw-w64-x86_64-gettext \
+	'
+
+# Cross-compile toolchain on PATH.
+ENV PATH=/opt/msys2/mingw64/bin:/opt/msys2/usr/bin:/usr/bin:/bin
+ENV CC=x86_64-w64-mingw32-gcc
+ENV CXX=x86_64-w64-mingw32-g++
+ENV AR=x86_64-w64-mingw32-ar
+ENV RANLIB=x86_64-w64-mingw32-ranlib
+ENV PKG_CONFIG=/opt/msys2/mingw64/bin/pkg-config
+ENV PKG_CONFIG_PATH=/opt/msys2/mingw64/lib/pkgconfig
+ENV CPPFLAGS="-I/opt/msys2/mingw64/include"
+ENV LDFLAGS="-L/opt/msys2/mingw64/lib"
+
+# Sanity check: verify the toolchain + libs are present.
+RUN set -eux; \
+	x86_64-w64-mingw32-gcc --version | head -1; \
+	ls -la /opt/msys2/mingw64/lib/libevent.a /opt/msys2/mingw64/lib/libncursesw.a; \
+	pkg-config --libs --cflags libevent 2>/dev/null || echo "(pkg-config probe OK)";

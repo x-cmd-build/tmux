@@ -208,13 +208,12 @@ int tcdrain(int fd)
  * fnmatch.h. Provide a stub. tmux uses it for FNM_PATHNAME in
  * path glob matching (path.c). The full implementation is in
  * glibc; for git-bash use we provide the common subset.
+ *
+ * FNM_* constants come from the shim header <fnmatch.h> on
+ * the include path (-I$BUILD_DIR/compat-inc). Don't re-define
+ * them here — that would be a redefinition error.
  */
 #include <fnmatch.h>
-
-#define FNM_PATHNAME 0x01
-#define FNM_NOESCAPE 0x02
-#define FNM_PERIOD   0x04
-#define FNM_NOMATCH   1
 
 int fnmatch(const char *pattern, const char *string, int flags)
 {
