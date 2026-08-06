@@ -240,13 +240,17 @@ fi
 # `make` then tries to run aclocal-1.15 / automake-1.15, which aren't
 # installed in CI images — error 127.
 #
-# Touch the generated files so make's regeneration rules see them as
-# fresh and skip the rebuild. Same pattern as ljh-sh/gawk.
+# Touch the generated files to a FUTURE timestamp so make's regen
+# rules see them as strictly newer than their sources and skip
+# the rebuild. `touch -r` only sets the same mtime as the source,
+# which can still trigger regen (mtime comparison uses strict <);
+# using an absolute future date is the robust fix. Same pattern as
+# ljh-sh/gawk + ljh-sh/iperf.
 # ----------------------------------------------------------------------
 echo "==> touch: stamp aclocal.m4 + Makefile.in to suppress autotools regen"
 ( cd "$SRC" \
-	&& touch -r configure.ac aclocal.m4 2>/dev/null || touch aclocal.m4 \
-	&& touch -r Makefile.am Makefile.in configure config.h.in 2>/dev/null \
+	&& touch -d '2030-01-01' aclocal.m4 2>/dev/null || touch aclocal.m4 \
+	&& touch -d '2030-01-01' Makefile.in configure config.h.in 2>/dev/null \
 	|| true )
 
 mkdir -p "$BUILD_DIR"
