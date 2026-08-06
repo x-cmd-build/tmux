@@ -37,9 +37,8 @@ jobs:
           - { target: x86_64-linux-musl,   runner: ubuntu-latest,    os: linux,   libc: musl, docker_arch: amd64 }
           - { target: aarch64-linux-musl,  runner: ubuntu-24.04-arm, os: linux,   libc: musl, docker_arch: arm64 }
           - { target: aarch64-macos,       runner: macos-latest,     os: macos                  }
-          # x86_64-macos: cross from aarch64 via Rosetta /usr/local — see
-          # build-and-test.yml matrix comment.
           - { target: x86_64-macos,        runner: macos-latest,     os: macos, cross: x86_64 }
+          - { target: x86_64-windows,      runner: windows-latest,   os: windows                }
     env:
       TARGET: ${{ matrix.target }}
     steps:
@@ -68,6 +67,22 @@ jobs:
           arch -x86_64 /usr/local/bin/brew install bash autoconf automake libtool pkg-config
           arch -x86_64 /usr/local/bin/brew install libevent ncurses
 
+      - name: Install deps (Windows MSYS2 + mingw64 + libevent/ncurses)
+        if: matrix.os == 'windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            git
+            base-devel
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-autotools
+            mingw-w64-x86_64-libevent
+            mingw-w64-x86_64-ncurses
+            mingw-w64-x86_64-pkg-config
+            mingw-w64-x86_64-gettext
+
       # ---- build + smoke ----
       - name: Build + smoke on Alpine (musl)
         if: matrix.libc == 'musl'
@@ -86,9 +101,24 @@ jobs:
           NCURSES_PREFIX:  /usr/local/opt/ncurses
         run: bash scripts/build.sh && bash scripts/smoke.sh
 
+      - name: Build (Windows x86_64 — msys2 bash + mingw64)
+        if: matrix.os == 'windows'
+        shell: msys2 {0}
+        env:
+          TMUX_OS_HINT: msys
+        run: bash scripts/build.sh && bash scripts/smoke.sh
+
       # ---- package ----
-      - name: Package
+      - name: Package (Linux / macOS)
+        if: matrix.os != 'windows'
         run: TARGET=${{ matrix.target }} bash scripts/package.sh
+
+      - name: Package (Windows)
+        if: matrix.os == 'windows'
+        shell: msys2 {0}
+        env:
+          TARGET: ${{ matrix.target }}
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/package.ps1
 
       # ---- verify ----
       - name: Verify self-contained (Linux)
@@ -111,10 +141,19 @@ jobs:
             && { echo "FAIL: $bin links Homebrew dylibs"; exit 1; } || true
           echo "OK: only system libs (/usr/lib, /System/Library)"
 
-      - name: Show file type & size
+      - name: Show file type & size (Linux/macOS)
+        if: matrix.os != 'windows'
         run: |
           file dist/tmux-${{ matrix.target }}/bin/tmux
           du -h dist/tmux-${{ matrix.target }}.tar.xz
+
+      - name: Show file type & size (Windows)
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: |
+          $exe = "dist/tmux-${{ matrix.target }}/bin/tmux.exe"
+          file $exe
+          Get-ChildItem "dist/tmux-${{ matrix.target }}.zip" | Format-Table Name, Length
 
       # ---- upload artifact (used by the release job below) ----
       - name: Upload artifact

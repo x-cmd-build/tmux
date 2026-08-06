@@ -44,8 +44,16 @@ jobs:
           # queue wait. Cross-compile gives us the same result with
           # a working runner + x86_64 .a files under /usr/local.
           - { target: x86_64-macos,        runner: macos-latest,     os: macos, cross: x86_64 }
-          # x86_64-windows: DEFERRED to v0.2.0 — see scripts/build.sh
-          # `msys` branch and NOTICE.md §Windows support.
+          # x86_64-windows: mingw64 + MSYS2 build. tmux 3.7b builds
+          # cleanly with CPPFLAGS=-U_XOPEN_SOURCE -I/usr/include/
+          # ncursesw (the MSYS2 PKGBUILD recipe — no patches). The
+          # tty-less msys2 bash environment skips smoke pty-needing
+          # checks via the WINDOWS_SMOKE branch in scripts/smoke.sh.
+          # See NOTICE.md §Windows support.
+          - { target: x86_64-windows,      runner: windows-latest,   os: windows                }
+          # aarch64-windows: NOT in matrix — MSYS2 MINGW64 doesn't
+          # ship mingw-w64-aarch64-gcc as of 2026-08-06 (same gap as
+          # ljh-sh/fio + ljh-sh/iperf + ljh-sh/gawk).
     env:
       TARGET: ${{ matrix.target }}
     steps:
@@ -108,9 +116,29 @@ jobs:
           NCURSES_PREFIX:  /usr/local/opt/ncurses
         run: bash scripts/build.sh && bash scripts/smoke.sh
 
+      # Windows x86_64: MSYS2 / mingw64 build. tmux 3.7b builds
+      # cleanly with the MSYS2 PKGBUILD recipe (no patches; just
+      # CPPFLAGS=-U_XOPEN_SOURCE -I/usr/include/ncursesw). The msys2
+      # bash shell has no tty for pane rendering, so smoke is
+      # informational only.
+      - name: Build (Windows x86_64 — msys2 bash + mingw64)
+        if: matrix.os == 'windows'
+        shell: msys2 {0}
+        env:
+          TMUX_OS_HINT: msys
+        run: bash scripts/build.sh && bash scripts/smoke.sh
+
       # ---- package ----
       - name: Package (Linux / macOS)
+        if: matrix.os != 'windows'
         run: TARGET=${{ matrix.target }} bash scripts/package.sh
+
+      - name: Package (Windows)
+        if: matrix.os == 'windows'
+        shell: msys2 {0}
+        env:
+          TARGET: ${{ matrix.target }}
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/package.ps1
 
       # ---- verify self-contained ----
       - name: Verify self-contained (Linux)
@@ -133,10 +161,19 @@ jobs:
             && { echo "FAIL: $bin links Homebrew dylibs"; exit 1; } || true
           echo "OK: only system libs (/usr/lib, /System/Library)"
 
-      - name: Show file type & size
+      - name: Show file type & size (Linux/macOS)
+        if: matrix.os != 'windows'
         run: |
           file dist/tmux-${{ matrix.target }}/bin/tmux
           du -h dist/tmux-${{ matrix.target }}.tar.xz
+
+      - name: Show file type & size (Windows)
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: |
+          $exe = "dist/tmux-${{ matrix.target }}/bin/tmux.exe"
+          file $exe
+          Get-ChildItem "dist/tmux-${{ matrix.target }}.zip" | Format-Table Name, Length
 
       # ---- upload artifact (for human inspection; NOT a release) ----
       - name: Upload test artifact

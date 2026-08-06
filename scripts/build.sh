@@ -167,29 +167,24 @@ darwin)
 	fi
 	;;
 msys)
-	# Windows MSYS2 (mingw64). DEFERRED — tmux 3.7 configure fails
-	# because CMSG_DATA is not in MinGW's <sys/socket.h>. We still
-	# honor the request (so manual builds work), but emit a clear
-	# message and bail out with a documented exit code so the CI
-	# YAML's `continue-on-error: true` gate catches it gracefully.
+	# Windows MSYS2 (mingw64). tmux 3.7b builds cleanly with
+	# CPPFLAGS=-U_XOPEN_SOURCE -I/usr/include/ncursesw (the MSYS2
+	# PKGBUILD recipe; no patches). Dynamic link against MSYS2's
+	# libevent + ncurses DLLs — package.ps1 copies them alongside
+	# tmux.exe (Windows app-local DLL search).
 	export CC="${CC:-gcc}"
 	: "${CFLAGS:=-O2 -D_FORTIFY_SOURCE=2}"
 	: "${LDFLAGS:=-lws2_32}"
 	export CFLAGS LDFLAGS
-	CONFIGURE_ARGS="$CONFIGURE_BASE --disable-utf8proc --disable-systemd --enable-shared --disable-static"
+	# CRITICAL: -U_XOPEN_SOURCE bypasses tmux's broken CMSG_DATA
+	# detection (which probes <sys/socket.h> for CMSG_DATA, missing
+	# from MinGW headers). ncursesw is MSYS2's wide-char ncurses.
+	: "${CPPFLAGS:=$TMUX_MSYS_CPPFLAGS}"
+	export CPPFLAGS
+	CONFIGURE_ARGS="$CONFIGURE_BASE $TMUX_MSYS_CONFIGURE_ARGS --disable-utf8proc --disable-systemd --enable-shared --disable-static"
 	if [ -z "$TRIPLET" ]; then
 		TRIPLET="${TARGET_ARCH}-w64-mingw32"
 	fi
-	# Probe for the known CMSG_DATA failure early so the user gets a
-	# clear message rather than a deep autotools backtrace.
-	cat <<'EOF' >&2
-==> NOTE: tmux 3.7 Windows support is DEFERRED in this repo.
-    tmux 3.7's configure.ac checks for CMSG_DATA in <sys/socket.h>,
-    which MinGW's mingw64 headers don't provide without a feature
-    test macro. Upstream tmux does not support Windows; the MSYS2
-    tmux port uses local patches not yet in 3.7.
-    See NOTICE.md §Windows support and mneme#N for the patch plan.
-EOF
 	;;
 linux)
 	# Linux host (glibc or musl — Alpine docker for the musl case).
