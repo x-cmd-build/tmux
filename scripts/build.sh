@@ -433,6 +433,20 @@ struct termios {
 SHIM
 	# Add compat-inc to CPPFLAGS so -I picks it up before /mingw64/include.
 	export CPPFLAGS="$CPPFLAGS -I$COMPAT_INC"
+	# Compile the termios/ioctl/fnmatch compat shim into tmux.
+	# mingw-w64 doesn't ship these functions; we provide minimal
+	# Windows Console API implementations.
+	TMUX_COMPAT_OBJS=""
+	TMUX_SRC="$ROOT/scripts/compat-windows.c"
+	if [ -f "$TMUX_SRC" ]; then
+		echo "==> compile compat-windows.c (Windows Console API shim)"
+		TMUX_COMPAT_O="$BUILD_DIR/compat-windows.o"
+		${CC:-gcc} -c -O2 -D_FORTIFY_SOURCE=2 \
+			"$TMUX_SRC" -o "$TMUX_COMPAT_O" \
+			-I"$COMPAT_INC" \
+			|| { echo "ERROR: compat-windows.c failed to compile" >&2; exit 1; }
+		TMUX_COMPAT_OBJS="$TMUX_COMPAT_O"
+	fi
 	;;
 esac
 
@@ -522,6 +536,26 @@ fi
 echo "==> make -C $BUILD_DIR -j$JOBS  ($MAKE_AUTOTOOLS_STUB)"
 # shellcheck disable=SC2086  # MAKE_AUTOTOOLS_STUB is intentionally split.
 make -C "$BUILD_DIR" -j"$JOBS" $MAKE_AUTOTOOLS_STUB
+
+# On Windows, append the compat shim object to the final link so
+# tcgetattr/tcsetattr/cfmakeraw/ioctl(TIOCGWINSZ)/fnmatch resolve.
+# (Linux/macOS leave TMUX_COMPAT_OBJS empty — those platforms link
+# against the real libtermios/libc.)
+if [ "$OS" = "msys" ] && [ -n "$TMUX_COMPAT_OBJS" ]; then
+	echo "==> re-link tmux with compat shim objects (Windows)"
+	cd "$BUILD_DIR"
+	TMUX_OBJS=$(ls *.o 2>/dev/null | tr '\n' ' ')
+	# Re-link using the link command captured from the Makefile
+	# (we can't re-run `make` with extra objects reliably, so we
+	# invoke gcc/clang directly with the same flags).
+	CC_CMD="${CC:-gcc}"
+	if "$CC_CMD" -o tmux $TMUX_OBJS $TMUX_COMPAT_OBJS $LDFLAGS -lws2_32 -lbcrypt 2>&1 | tail -3; then
+		echo "    re-link OK"
+	else
+		echo "    re-link FAILED — falling back to make-built binary"
+	fi
+	cd - >/dev/null
+fi
 
 ext_for() { [ -f "$1.exe" ] && printf '%s.exe' "$1" || printf '%s' "$1"; }
 BIN="$(ext_for "$BUILD_DIR/tmux")"
