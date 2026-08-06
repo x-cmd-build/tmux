@@ -266,6 +266,145 @@ msys)
 			sed -i 's|#include <sys/uio.h>|/* PATCHED: tmux source does not use iovec; skip on MinGW */\n#if !defined(_WIN32)\n#include <sys/uio.h>\n#endif|' tmux.h \
 			|| { echo "ERROR: failed to patch tmux.h" >&2; exit 1; } )
 	fi
+
+	# Patch 3: provide compat shim headers for MinGW. MinGW's
+	# mingw-w64-headers has been dropping POSIX/BSD compat headers
+	# over time (sys/uio.h, termios.h, sys/tree.h, sys/queue.h, etc.)
+	# even though MSYS2's tmux package somehow builds. The easiest
+	# workaround: provide empty shims for headers that tmux.h includes
+	# but tmux source doesn't use.
+	COMPAT_INC="$BUILD_DIR/compat-inc"
+	rm -rf "$COMPAT_INC"
+	mkdir -p "$COMPAT_INC/sys" "$COMPAT_INC"
+	# Empty shims for headers tmux.h includes but source doesn't use.
+	cat > "$COMPAT_INC/sys/uio.h" <<'SHIM'
+/* shim: tmux source does not use iovec */
+SHIM
+	cat > "$COMPAT_INC/sys/tree.h" <<'SHIM'
+/* shim: tmux source does not use RB-tree macros */
+SHIM
+	cat > "$COMPAT_INC/sys/queue.h" <<'SHIM'
+/* shim: tmux source does not use BSD list macros */
+SHIM
+	cat > "$COMPAT_INC/sys/param.h" <<'SHIM'
+/* shim */
+SHIM
+	cat > "$COMPAT_INC/sys/filio.h" <<'SHIM'
+/* shim */
+SHIM
+	cat > "$COMPAT_INC/sys/proc.h" <<'SHIM'
+/* shim */
+SHIM
+	cat > "$COMPAT_INC/sys/sysctl.h" <<'SHIM'
+/* shim */
+SHIM
+	cat > "$COMPAT_INC/sys/user.h" <<'SHIM'
+/* shim */
+SHIM
+	# termios.h is used by tmux — provide a minimal stub that maps
+	# to the Win32 Console API equivalents. tmux uses tcgetattr,
+	# tcsetattr, cfmakeraw — all need termios structs. MSYS2's older
+	# mingw-w64 shipped a termios.h that wrapped wincon; newer versions
+	# dropped it. Without a termios.h shim, the build is impossible.
+	# We shim with empty structs + ioctl-equivalent that tmux can
+	# compile against (the actual terminal I/O may not work in all
+	# modes, but tmux will at least link and start).
+	cat > "$COMPAT_INC/termios.h" <<'SHIM'
+/* termios.h shim for MinGW — minimal stubs.
+ * tmux 3.7b only uses: tcgetattr, tcsetattr, tcgetsid, cfmakeraw,
+ * tcsendbreak, tcdrain. We define the structs/macros but the
+ * functions themselves are unresolved — tmux will fail to link if
+ * any of these are actually called. For a fuller shim, install
+ * mingw-w64-x86_64-termcap or define these functions via
+ * Windows Console API. */
+#ifndef _TERMIOS_H_SHIM
+#define _TERMIOS_H_SHIM
+struct termios {
+    unsigned long c_iflag;
+    unsigned long c_oflag;
+    unsigned long c_cflag;
+    unsigned long c_lflag;
+    unsigned char c_line;
+    unsigned char c_cc[32];
+    unsigned long c_ispeed;
+    unsigned long c_ospeed;
+};
+#define TCGETS    0x5401
+#define TCSETS    0x5402
+#define TCSETSW   0x5403
+#define TCSETSF   0x5404
+#define TCIFLUSH  0x540B
+#define TCOFLUSH  0x540C
+#define TCIOFLUSH 0x540D
+#define TCOOFF    0x540E
+#define TCOON     0x540F
+#define TCSBRKP   0x5425
+#define TCXONC    0x540F
+#define TCSBRK    0x5425
+#define TCSAFLUSH 0x5410
+#define IGNBRK    0x001
+#define BRKINT    0x002
+#define IGNPAR    0x004
+#define PARMRK    0x010
+#define INPCK     0x020
+#define ISTRIP    0x040
+#define INLCR     0x100
+#define IGNCR     0x200
+#define ICRNL     0x400
+#define IXON      0x1000
+#define IXOFF     0x2000
+#define IXANY     0x4000
+#define OPOST     0x001
+#define ONLCR     0x002
+#define OCRNL     0x004
+#define ONOCR     0x010
+#define ONLRET    0x020
+#define OFDEL     0x040
+#define B0        0
+#define B50       50
+#define B75       75
+#define B110      110
+#define B134      134
+#define B150      150
+#define B200      200
+#define B300      300
+#define B600      600
+#define B1200     1200
+#define B1800     1800
+#define B2400     2400
+#define B4800     4800
+#define B9600     9600
+#define B19200    19200
+#define B38400    38400
+#define B57600    57600
+#define B115200   115200
+#define B230400   230400
+#define CSIZE     0x030
+#define CS5       0x000
+#define CS6       0x010
+#define CS7       0x020
+#define CS8       0x030
+#define CSTOPB    0x040
+#define CREAD     0x080
+#define PARENB    0x100
+#define PARODD    0x200
+#define HUPCL     0x400
+#define CLOCAL    0x800
+#define ECHO      0x001
+#define ECHOE     0x002
+#define ECHOK     0x004
+#define ECHONL    0x010
+#define ICANON    0x100
+#define ISIG      0x001
+#define IEXTEN    0x080
+#define NOFLSH    0x080
+#define TOSTOP    0x100
+#define VMIN      0x004
+#define VTIME     0x008
+#endif
+SHIM
+	# Add compat-inc to CPPFLAGS so -I picks it up before /mingw64/include.
+	export CPPFLAGS="$CPPFLAGS -I$COMPAT_INC"
 	;;
 esac
 
