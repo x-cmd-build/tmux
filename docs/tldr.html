@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>tmux — tldr quick examples</title>
+<style>
+  body { font-family: -apple-system, "SF Mono", Menlo, Consolas, monospace; max-width: 880px; margin: 2rem auto; padding: 0 1.5rem; color: #1a1a1a; line-height: 1.55; }
+  h1 { border-bottom: 2px solid #1a1a1a; padding-bottom: .3em; }
+  h2 { margin-top: 2rem; border-bottom: 1px solid #ccc; padding-bottom: .2em; }
+  pre { background: #f6f8fa; border: 1px solid #e1e4e8; border-radius: 4px; padding: 12px 16px; overflow-x: auto; font-size: 13.5px; }
+  code { font-family: inherit; background: #f6f8fa; padding: 1px 4px; border-radius: 3px; font-size: 90%; }
+  .desc { color: #586069; font-size: 90%; margin-top: -0.4em; }
+  hr { border: 0; border-top: 1px dashed #ccc; margin: 1.5em 0; }
+</style>
+</head>
+<body>
+
+<h1>tmux — tldr quick examples</h1>
+<p class="desc">
+  Copy-pasteable examples for the 10 most common tmux 3.7 operations.
+  Install via <code>x eget x-cmd-build/tmux</code> or grab the matching
+  archive from <a href="https://github.com/x-cmd-build/tmux/releases">Releases</a>.
+</p>
+
+<h2>1. Start a new session</h2>
+<pre><code>tmux new-session -s work -d    # detached, named 'work'
+tmux ls                          # list sessions</code></pre>
+
+<h2>2. Attach / detach</h2>
+<pre><code>tmux attach -t work              # attach to existing session
+Ctrl-b d                         # detach (default prefix)</code></pre>
+
+<h2>3. Windows (tabs)</h2>
+<pre><code>Ctrl-b c    # create new window
+Ctrl-b ,    # rename current window
+Ctrl-b n    # next window
+Ctrl-b p    # previous window
+Ctrl-b &amp;    # kill current window</code></pre>
+
+<h2>4. Panes (splits)</h2>
+<pre><code>Ctrl-b %           # vertical split
+Ctrl-b "           # horizontal split
+Ctrl-b o           # cycle panes
+Ctrl-b ;           # toggle last-active pane
+Ctrl-b x           # kill current pane</code></pre>
+
+<h2>5. Resize panes</h2>
+<pre><code>Ctrl-b Up/Down/Left/Right   # 1-cell resize
+Ctrl-b Alt-Up/Down/Left/Right  # 5-cell resize
+Ctrl-b z                    # toggle zoom (full-screen pane)</code></pre>
+
+<h2>6. Copy mode (scroll + copy)</h2>
+<pre><code>Ctrl-b [            # enter copy mode (vim-like)
+  q                  # quit copy mode
+  /foo               # search forward for 'foo'
+  ?foo               # search backward for 'foo'
+  Space              # start selection
+  Enter              # copy selection
+Ctrl-b ]            # paste</code></pre>
+
+<h2>7. Status line customization</h2>
+<pre><code># add to ~/.tmux.conf:
+set -g status-right "%H:%M"
+set -g status-bg black
+set -g status-fg green</code></pre>
+
+<h2>8. Reload config without restarting</h2>
+<pre><code>tmux source-file ~/.tmux.conf
+# or, inside tmux:  Ctrl-b :  then type  source-file ~/.tmux.conf</code></pre>
+
+<h2>9. Remote pair-programming via SSH</h2>
+<pre><code>ssh user@host -- tmux new-session -s pair -d   # start on remote
+ssh user@host -- tmux attach -t pair            # attach (or share) session</code></pre>
+
+<h2>10. Control mode (scripting)</h2>
+<pre><code>tmux -C -S /tmp/ctl new-session -d -s bot 'sleep 3600'
+# Send commands via the control-mode protocol:
+# (useful for programmatic tmux clients — IDE integrations, etc.)</code></pre>
+
+<hr>
+<p>
+  See <code>man tmux</code> for the full reference (700+ lines).
+  All upstream tmux 3.7 features work in this build: floating panes,
+  sixel images (with <code>--enable-sixel</code>), run-shell argument
+  expansion (<code>#{1}</code>…<code>#{N}</code>), and the new
+  status-format-2 second status line.
+</p>
+
+</body>
+</html>

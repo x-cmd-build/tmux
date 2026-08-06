@@ -1,0 +1,31 @@
+# build artifacts
+build/
+dist/
+release-artifacts/
+
+# upstream tmux build outputs (tmux source dirs are NOT excluded —
+# vendored source is checked in; only build outputs are ignored)
+upstream/tmux/Makefile
+upstream/tmux/config.h
+upstream/tmux/config.h.in
+upstream/tmux/config.log
+upstream/tmux/config.status
+upstream/tmux/stamp-h1
+upstream/tmux/stamp-h2
+upstream/tmux/libtool
+upstream/tmux/tmux
+upstream/tmux/tmux.exe
+upstream/tmux/*.o
+upstream/tmux/cmd-parse.c
+# bootstrap artifacts (gitignored in upstream, kept here for offline build)
+!upstream/tmux/configure
+!upstream/tmux/aclocal.m4
+!upstream/tmux/Makefile.in
+!upstream/tmux/config.h.in
+!upstream/tmux/po/Makefile.in.in
+
+# editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp

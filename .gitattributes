@@ -1,0 +1,8 @@
+# Treat the vendored upstream/ as a single subtree for diff purposes.
+# Use `git diff --diff-filter=AM --stat upstream/tmux` to see only added
+# or modified files (skip the mass of unmodified vendored content).
+upstream/tmux/* linguist-vendored=true linguist-generated=true
+
+# Normalize line endings on the wrapper layer (POSIX-native).
+*          text=auto eol=lf
+*.bat      text eol=crlf

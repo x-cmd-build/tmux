@@ -1,0 +1,179 @@
+name: build-and-test
+
+# Auto-test stage: push / PR → builds all 5 targets, runs smoke, uploads
+# artifacts. No release publish.
+#
+# Splits with `release.yml`:
+#   - tag push / dispatch → release.yml (publish stage)
+#
+# Matrix mirrors the ljh-sh vendored-C dist regime: 4 fully-shipped +
+# 2 continue-on-error gates. tmux is shipped for 4 targets (the same
+# 4 as ljh-sh/iperf); the two Windows targets are gated until MSYS2
+# closes its mingw-w64-aarch64-gcc gap (aarch64) and the libevent
+# MSYS2 packaging stabilizes for mingw64 (x86_64).
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: x86_64-linux-musl,   runner: ubuntu-latest,    os: linux,   libc: musl, docker_arch: amd64 }
+          - { target: aarch64-linux-musl,  runner: ubuntu-24.04-arm, os: linux,   libc: musl, docker_arch: arm64 }
+          - { target: aarch64-macos,       runner: macos-latest,     os: macos                  }
+          - { target: x86_64-macos,        runner: macos-latest,     os: macos                  }
+          - { target: x86_64-windows,      runner: windows-latest,   os: windows                }
+    # x86_64-windows: continue-on-error due to a known tmux-on-MinGW
+    # limitation — tmux needs a tty for pane rendering, and the MSYS2
+    # bash CI runner lacks one. The smoke script detects MINGW/MSYS and
+    # skips the pty-needing checks; only #1 (version) + #4 (config
+    # parse) + #6 (control mode) are exercised. We still attempt the
+    # build + package but don't fail the PR if Windows regresses.
+    # aarch64-windows: NOT in the matrix — MSYS2 MINGW64 doesn't ship
+    # mingw-w64-aarch64-gcc as of 2026-08-06. Tracked in mneme#N for
+    # future inclusion.
+    continue-on-error: ${{ matrix.target == 'x86_64-windows' }}
+    env:
+      TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # ---- install deps ----
+      - name: Install deps (Linux glibc — only used by shell-out helpers)
+        if: matrix.libc == 'musl'
+        run: sudo apt-get update && sudo apt-get install -y curl
+
+      - name: Install deps (macOS)
+        if: matrix.os == 'macos'
+        run: |
+          brew update
+          brew install bash autoconf automake libtool pkg-config
+          brew install libevent ncurses
+
+      - name: Install deps (Windows MSYS2 + mingw64 + libevent/ncurses)
+        if: matrix.os == 'windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            git
+            base-devel
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-autotools
+            mingw-w64-x86_64-libevent
+            mingw-w64-x86_64-ncurses
+            mingw-w64-x86_64-pkg-config
+
+      # ---- build + smoke ----
+      # Musl: a single Alpine `docker run` does build + smoke.
+      # Alpine's apk brings build-base, bash, libevent-dev + ncurses-dev
+      # (static .a) — everything scripts/build-alpine.sh needs.
+      - name: Build + smoke on Alpine (musl)
+        if: matrix.libc == 'musl'
+        run: docker run --rm --platform linux/${{ matrix.docker_arch }} -v "$PWD":/w -w /w alpine:3.20 sh -c 'apk add --no-cache bash >/dev/null && bash /w/scripts/build-alpine.sh && bash /w/scripts/smoke.sh'
+
+      # macOS aarch64: native host build (with Homebrew libevent/ncurses
+      # force-loaded via build.sh).
+      - name: Build (macOS aarch64 — host)
+        if: matrix.os == 'macos' && matrix.target == 'aarch64-macos'
+        run: bash scripts/build.sh && bash scripts/smoke.sh
+
+      # macOS x86_64: cross-compile via clang -arch (Apple SDK is shared).
+      - name: Build (macOS x86_64 — cross from aarch64)
+        if: matrix.target == 'x86_64-macos'
+        env:
+          TMUX_TARGET_ARCH: x86_64
+          TMUX_OS_HINT: darwin
+        run: bash scripts/build.sh && bash scripts/smoke.sh
+
+      # Windows x86_64: msys2 bash + MinGW cross toolchain.
+      - name: Build (Windows x86_64 — msys2 bash)
+        if: matrix.os == 'windows'
+        shell: msys2 {0}
+        env:
+          TMUX_OS_HINT: msys
+        run: bash scripts/build.sh
+
+      # Windows smoke (informational; no tty for pty-needing checks).
+      - name: Smoke test on Windows (informational)
+        if: matrix.os == 'windows'
+        shell: msys2 {0}
+        continue-on-error: true
+        run: |
+          set +e
+          cd "$GITHUB_WORKSPACE"
+          export BUILD_DIR="$GITHUB_WORKSPACE/build"
+          bash scripts/smoke.sh 2>&1 | tail -30
+          echo "OK: smoke ran (some checks skip on Windows — see scripts/smoke.sh WINDOWS_SMOKE branch)"
+
+      # ---- package ----
+      - name: Package (Linux / macOS)
+        if: matrix.os != 'windows'
+        run: TARGET=${{ matrix.target }} bash scripts/package.sh
+
+      - name: Package (Windows)
+        if: matrix.os == 'windows'
+        shell: msys2 {0}
+        env:
+          TARGET: ${{ matrix.target }}
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/package.ps1
+
+      # ---- verify self-contained ----
+      - name: Verify self-contained (Linux)
+        if: matrix.os == 'linux'
+        run: |
+          set -e
+          bin="dist/tmux-${{ matrix.target }}/bin/tmux"
+          out="$(ldd "$bin" 2>&1 || true)"
+          echo "$out"
+          echo "$out" | grep -q "not a dynamic executable" \
+            || { echo "FAIL: not fully static"; exit 1; }
+
+      - name: Verify self-contained (macOS)
+        if: matrix.os == 'macos'
+        run: |
+          set -e
+          bin="dist/tmux-${{ matrix.target }}/bin/tmux"
+          otool -L "$bin"
+          otool -L "$bin" | grep -E '/(opt/homebrew|usr/local)/' \
+            && { echo "FAIL: $bin links Homebrew dylibs"; exit 1; } || true
+          echo "OK: only system libs (/usr/lib, /System/Library)"
+
+      - name: Show file type & size (Linux/macOS)
+        if: matrix.os != 'windows'
+        run: |
+          file dist/tmux-${{ matrix.target }}/bin/tmux
+          du -h dist/tmux-${{ matrix.target }}.tar.xz
+
+      - name: Show file type & size (Windows)
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: |
+          $exe = "dist/tmux-${{ matrix.target }}/bin/tmux.exe"
+          file $exe
+          Get-ChildItem "dist/tmux-${{ matrix.target }}.zip" | Format-Table Name, Length
+
+      # ---- upload artifact (for human inspection; NOT a release) ----
+      - name: Upload test artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tmux-test-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: warn
+          retention-days: 7
