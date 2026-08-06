@@ -97,16 +97,24 @@ macos_force_load_libs() {
 	# Homebrew's ncurses (since the `ncurses` formula rewrite in 2024)
 	# merges libtinfo into libncurses — `libtinfo.a` no longer exists
 	# as a separate file. We probe for both and use what's available.
-	LIBEVENT_A="$(brew --prefix libevent 2>/dev/null)/lib/libevent.a"
-	NCURSES_A="$(brew --prefix ncurses 2>/dev/null)/lib/libncurses.a"
-	TINFO_A="$(brew --prefix ncurses 2>/dev/null)/lib/libtinfo.a"
+	#
+	# Cross-build from aarch64 → x86_64: set LIBEVENT_PREFIX /
+	# NCURSES_PREFIX env vars to point at the x86_64 Homebrew under
+	# /usr/local (Rosetta path), NOT the native arm64 /opt/homebrew.
+	# The aarch64 .a archives are wrong-arch and break x86_64 link.
+	LIBEVENT_PREFIX="${LIBEVENT_PREFIX:-$(brew --prefix libevent 2>/dev/null)}"
+	NCURSES_PREFIX="${NCURSES_PREFIX:-$(brew --prefix ncurses 2>/dev/null)}"
+
+	LIBEVENT_A="$LIBEVENT_PREFIX/lib/libevent.a"
+	NCURSES_A="$NCURSES_PREFIX/lib/libncurses.a"
+	TINFO_A="$NCURSES_PREFIX/lib/libtinfo.a"
 
 	flags=""
 	for f in "$LIBEVENT_A" "$NCURSES_A"; do
 		if [ -f "$f" ]; then
 			flags="$flags -Wl,-force_load,$f"
 		else
-			echo "warn: missing $f (run: brew install libevent ncurses)" >&2
+			echo "warn: missing $f (set LIBEVENT_PREFIX/NCURSES_PREFIX)" >&2
 		fi
 	done
 	# libtinfo.a is optional — only present in older Homebrew ncurses.

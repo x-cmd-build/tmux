@@ -37,9 +37,9 @@ jobs:
           - { target: x86_64-linux-musl,   runner: ubuntu-latest,    os: linux,   libc: musl, docker_arch: amd64 }
           - { target: aarch64-linux-musl,  runner: ubuntu-24.04-arm, os: linux,   libc: musl, docker_arch: arm64 }
           - { target: aarch64-macos,       runner: macos-latest,     os: macos                  }
-          # x86_64-macos: macos-13 (Intel) runner — see build-and-test.yml
-          # matrix comment for why we can't cross-compile from arm64.
-          - { target: x86_64-macos,        runner: macos-13,         os: macos                  }
+          # x86_64-macos: cross from aarch64 via Rosetta /usr/local — see
+          # build-and-test.yml matrix comment.
+          - { target: x86_64-macos,        runner: macos-latest,     os: macos, cross: x86_64 }
     env:
       TARGET: ${{ matrix.target }}
     steps:
@@ -50,12 +50,23 @@ jobs:
         if: matrix.libc == 'musl'
         run: sudo apt-get update && sudo apt-get install -y curl
 
-      - name: Install deps (macOS)
-        if: matrix.os == 'macos'
+      - name: Install deps (macOS — aarch64 native)
+        if: matrix.os == 'macos' && matrix.cross != 'x86_64'
         run: |
           brew update
           brew install bash autoconf automake libtool pkg-config
           brew install libevent ncurses
+
+      - name: Install deps (macOS — x86_64 via Rosetta)
+        if: matrix.cross == 'x86_64'
+        run: |
+          softwareupdate --install-rosetta --agree-to-license
+          if ! command -v /usr/local/bin/brew >/dev/null 2>&1; then
+            arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
+          fi
+          arch -x86_64 /usr/local/bin/brew update
+          arch -x86_64 /usr/local/bin/brew install bash autoconf automake libtool pkg-config
+          arch -x86_64 /usr/local/bin/brew install libevent ncurses
 
       # ---- build + smoke ----
       - name: Build + smoke on Alpine (musl)
@@ -66,8 +77,13 @@ jobs:
         if: matrix.target == 'aarch64-macos'
         run: bash scripts/build.sh && bash scripts/smoke.sh
 
-      - name: Build (macOS x86_64 — host on macos-13)
-        if: matrix.target == 'x86_64-macos'
+      - name: Build (macOS x86_64 — cross from aarch64, Rosetta /usr/local .a)
+        if: matrix.cross == 'x86_64'
+        env:
+          TMUX_TARGET_ARCH: x86_64
+          TMUX_OS_HINT: darwin
+          LIBEVENT_PREFIX: /usr/local/opt/libevent
+          NCURSES_PREFIX:  /usr/local/opt/ncurses
         run: bash scripts/build.sh && bash scripts/smoke.sh
 
       # ---- package ----
