@@ -301,6 +301,34 @@ SHIM
 	cat > "$COMPAT_INC/sys/user.h" <<'SHIM'
 /* shim */
 SHIM
+	# sys/ioctl.h: compat.h uses it for TIOCGWINSZ. Provide a stub.
+	cat > "$COMPAT_INC/sys/ioctl.h" <<'SHIM'
+/* shim: tmux uses TIOCGWINSZ (via ioctl) for terminal size. */
+/* On Windows we map this to Windows Console API at link time. */
+#ifndef _SYS_IOCTL_H_SHIM
+#define _SYS_IOCTL_H_SHIM
+struct winsize {
+    unsigned short ws_row;
+    unsigned short ws_col;
+    unsigned short ws_xpixel;
+    unsigned short ws_ypixel;
+};
+#define TIOCGWINSZ 0x5413
+#define TIOCSWINSZ 0x5414
+#endif
+SHIM
+	cat > "$COMPAT_INC/fnmatch.h" <<'SHIM'
+/* shim: tmux compat.h uses fnmatch() */
+#ifndef _FNMATCH_H_SHIM
+#define _FNMATCH_H_SHIM
+#define FNM_NOMATCH 1
+#define FNM_PATHNAME 2
+#define FNM_PERIOD 4
+#define FNM_NOESCAPE 8
+#define FNM_CASEFOLD 16
+extern int fnmatch(const char *, const char *, int);
+#endif
+SHIM
 	# termios.h is used by tmux — provide a minimal stub that maps
 	# to the Win32 Console API equivalents. tmux uses tcgetattr,
 	# tcsetattr, cfmakeraw — all need termios structs. MSYS2's older
