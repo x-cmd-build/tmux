@@ -237,21 +237,23 @@ fi
 # Vendored configure.ac + Makefile.am often have newer timestamps
 # than the generated aclocal.m4 + Makefile.in (the tarball `make
 # dist` regenerates them in a different order than they're consumed).
-# `make` then tries to run aclocal-1.15 / automake-1.15, which aren't
-# installed in CI images — error 127.
+# `make` then tries to run `$(AUTOMAKE) --foreign`, which is
+# `/etc/missing automake-1.15 --foreign` — and Alpine apk ships
+# `automake` (no versioned binary), so error 127.
 #
-# Touch the generated files to a FUTURE timestamp so make's regen
-# rules see them as strictly newer than their sources and skip
-# the rebuild. `touch -r` only sets the same mtime as the source,
-# which can still trigger regen (mtime comparison uses strict <);
-# using an absolute future date is the robust fix. Same pattern as
-# ljh-sh/gawk + ljh-sh/iperf.
+# Touching timestamps doesn't reliably suppress regen (autoconf's
+# "newly created file is older than distributed" check fires when
+# Makefile.in is touched to a future date, AND make's strict <
+# comparison still triggers regen with equal mtimes).
+#
+# The robust fix: override the make variables AUTOMAKE / AUTOCONF /
+# ACLOCAL / AUTOHEADER to `true`, so the regen recipe becomes
+# `cd $(srcdir) && true --foreign` — succeeds, exits 0, and
+# leaves Makefile.in unchanged. Same approach ljh-sh uses across
+# its vendored-C dist repos when the build target's autotools
+# version doesn't match what's installed in CI.
 # ----------------------------------------------------------------------
-echo "==> touch: stamp aclocal.m4 + Makefile.in to suppress autotools regen"
-( cd "$SRC" \
-	&& touch -d '2030-01-01' aclocal.m4 2>/dev/null || touch aclocal.m4 \
-	&& touch -d '2030-01-01' Makefile.in configure config.h.in 2>/dev/null \
-	|| true )
+MAKE_AUTOTOOLS_STUB="AUTOMAKE=true AUTOCONF=true ACLOCAL=true AUTOHEADER=true"
 
 mkdir -p "$BUILD_DIR"
 
@@ -295,8 +297,9 @@ fi
 # ----------------------------------------------------------------------
 # Build.
 # ----------------------------------------------------------------------
-echo "==> make -C $BUILD_DIR -j$JOBS"
-make -C "$BUILD_DIR" -j"$JOBS"
+echo "==> make -C $BUILD_DIR -j$JOBS  ($MAKE_AUTOTOOLS_STUB)"
+# shellcheck disable=SC2086  # MAKE_AUTOTOOLS_STUB is intentionally split.
+make -C "$BUILD_DIR" -j"$JOBS" $MAKE_AUTOTOOLS_STUB
 
 ext_for() { [ -f "$1.exe" ] && printf '%s.exe' "$1" || printf '%s' "$1"; }
 BIN="$(ext_for "$BUILD_DIR/tmux")"
