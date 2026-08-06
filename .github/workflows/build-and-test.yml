@@ -35,6 +35,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # TEMP: Windows-only smoke (CI queue is backed up; reduce load)
+          - { target: x86_64-windows,      runner: windows-latest,   os: windows                }
+          # x86_64-linux-musl
           - { target: x86_64-linux-musl,   runner: ubuntu-latest,    os: linux,   libc: musl, docker_arch: amd64 }
           - { target: aarch64-linux-musl,  runner: ubuntu-24.04-arm, os: linux,   libc: musl, docker_arch: arm64 }
           - { target: aarch64-macos,       runner: macos-latest,     os: macos                  }
@@ -44,13 +47,6 @@ jobs:
           # queue wait. Cross-compile gives us the same result with
           # a working runner + x86_64 .a files under /usr/local.
           - { target: x86_64-macos,        runner: macos-latest,     os: macos, cross: x86_64 }
-          # x86_64-windows: mingw64 + MSYS2 build. tmux 3.7b builds
-          # cleanly with CPPFLAGS=-U_XOPEN_SOURCE -I/usr/include/
-          # ncursesw (the MSYS2 PKGBUILD recipe — no patches). The
-          # tty-less msys2 bash environment skips smoke pty-needing
-          # checks via the WINDOWS_SMOKE branch in scripts/smoke.sh.
-          # See NOTICE.md §Windows support.
-          - { target: x86_64-windows,      runner: windows-latest,   os: windows                }
           # aarch64-windows: NOT in matrix — MSYS2 MINGW64 doesn't
           # ship mingw-w64-aarch64-gcc as of 2026-08-06 (same gap as
           # ljh-sh/fio + ljh-sh/iperf + ljh-sh/gawk).
