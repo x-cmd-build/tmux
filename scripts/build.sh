@@ -235,27 +235,36 @@ fi
 	-delete 2>/dev/null || true )
 
 # ----------------------------------------------------------------------
-# Windows: patch configure.ac to bypass CMSG_DATA check.
+# Windows: patch configure.ac + tmux.h to bypass MinGW incompatibilities.
 #
-# tmux 3.7b's source code does NOT reference CMSG_DATA, HAVE_CMSG_DATA,
-# or XOPEN_DEFINES anywhere (grep confirms — see build-review.md) — the
-# configure-time check is purely vestigial (dates from when HP-UX needed
-# explicit _XOPEN_SOURCE for CMSG_DATA). On MinGW, mingw64's
-# <sys/socket.h> lacks CMSG_DATA (Windows uses WSA_CMSG_DATA), so the
-# check fails and the build aborts.
+# 1. CMSG_DATA check: tmux 3.7b's source code does NOT reference
+#    CMSG_DATA, HAVE_CMSG_DATA, or XOPEN_DEFINES anywhere — the
+#    configure-time check is purely vestigial (dates from when HP-UX
+#    needed explicit _XOPEN_SOURCE for CMSG_DATA). MinGW's
+#    <sys/socket.h> lacks CMSG_DATA (Windows uses WSA_CMSG_DATA), so
+#    the check fails and the build aborts. Replace the error with
+#    `found_cmsg_data=yes; XOPEN_DEFINES=""`.
 #
-# Fix: replace the AC_MSG_ERROR("CMSG_DATA not found") with
-# `found_cmsg_data=yes; XOPEN_DEFINES=""` so configure proceeds. The
-# resulting binary has the same behavior as upstream on Linux/BSD/macOS
-# because the source never reads CMSG_DATA in the first place.
+# 2. <sys/uio.h>: tmux.h includes it unconditionally, but no source
+#    file references iovec/readv/writev — another vestigial include.
+#    MinGW doesn't ship <sys/uio.h>. Wrap the include in a Linux/macOS
+#    gate.
 # ----------------------------------------------------------------------
 case "$OS" in
 msys)
+	# Patch 1: bypass CMSG_DATA check.
 	if [ -f "$SRC/configure.ac" ] && ! grep -q 'PATCHED: tmux source does not use CMSG_DATA' "$SRC/configure.ac"; then
 		echo "==> patch configure.ac: bypass CMSG_DATA check (Windows/MinGW)"
 		( cd "$SRC" && \
 			sed -i 's|		AC_MSG_ERROR("CMSG_DATA not found")|		# PATCHED: tmux source does not use CMSG_DATA; bypass MinGW check\n		found_cmsg_data=yes; XOPEN_DEFINES=""|' configure.ac \
 			|| { echo "ERROR: failed to patch configure.ac" >&2; exit 1; } )
+	fi
+	# Patch 2: gate <sys/uio.h> (no source uses iovec).
+	if [ -f "$SRC/tmux.h" ] && ! grep -q 'PATCHED: tmux source does not use iovec' "$SRC/tmux.h"; then
+		echo "==> patch tmux.h: gate <sys/uio.h> (Windows/MinGW)"
+		( cd "$SRC" && \
+			sed -i 's|#include <sys/uio.h>|/* PATCHED: tmux source does not use iovec; skip on MinGW */\n#if !defined(_WIN32)\n#include <sys/uio.h>\n#endif|' tmux.h \
+			|| { echo "ERROR: failed to patch tmux.h" >&2; exit 1; } )
 	fi
 	;;
 esac
