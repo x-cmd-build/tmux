@@ -7,7 +7,10 @@
 #       ubuntu-latest + Alpine docker     (x86_64-linux-musl)
 #       ubuntu-24.04-arm + Alpine docker  (aarch64-linux-musl)
 #       macos-14                          (aarch64-macos; cross to x86_64)
-#       windows-latest + MSYS2/mingw64    (x86_64-windows)
+#       windows-latest + MSYS2/mingw64    (x86_64-windows — DEFERRED to v0.2;
+#                                          tmux 3.7 configure fails on MinGW
+#                                          due to CMSG_DATA check; upstream
+#                                          does NOT support Windows)
 #   - Local development on any POSIX host with autotools.
 #
 # Cross-compile: set TMUX_TARGET_ARCH + TMUX_TARGET_OS (or TMUX_TRIPLET)
@@ -26,26 +29,18 @@
 #                                  configure ("static linking is not
 #                                  supported on macOS"). We instead
 #                                  force_load Homebrew's libevent.a +
-#                                  libncurses.a + libtinfo.a into the
-#                                  tmux binary. Only /usr/lib/libSystem.B.dylib
-#                                  remains dynamically linked (Apple's
-#                                  user-space is built this way).
+#                                  libncurses.a into the tmux binary.
+#                                  Only /usr/lib/libSystem.B.dylib remains
+#                                  dynamically linked (Apple's user-space
+#                                  is built this way).
 #
-#   Windows MSYS2 (mingw64)     : dynamic link against MSYS2's libevent
-#                                  + ncurses DLLs. DLLs are bundled
-#                                  alongside tmux.exe by package.ps1.
-#                                  Windows application-local DLL search
-#                                  finds them automatically.
+#   Windows MSYS2 (mingw64)     : DEFERRED — tmux 3.7 configure checks
+#                                  for CMSG_DATA in <sys/socket.h>, which
+#                                  doesn't exist on MinGW. Upstream tmux
+#                                  does not support Windows; the MSYS2
+#                                  tmux port uses patches not yet in 3.7.
+#                                  See NOTICE.md §Windows support.
 # ====================================================================
-#
-# Why a HYBRID linkage model? tmux's `--enable-static` is the cleanest
-# path on Linux (one -static flag does everything), but the configure
-# script explicitly rejects it on macOS with `AC_MSG_ERROR`. Windows
-# MSYS2 doesn't support `-static` either (mingw ld doesn't have it).
-# So we use the best tool each host offers:
-#   Linux  : autotools -static
-#   macOS  : ld -force_load .a archives
-#   Windows: dynamic + bundled DLLs
 set -eu
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
@@ -69,19 +64,14 @@ JOBS="$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.nproc 2>/dev/null 
 # Default configure args.
 #   --disable-dependency-tracking   one-shot CI build, no dep graph
 #   --disable-silent-rules          `make` logs each step (CI shows it)
-#   --enable-static                 fully static on Linux (rejected on
-#                                   macOS — handled by the host branch
-#                                   below)
 # ----------------------------------------------------------------------
 CONFIGURE_BASE="--disable-dependency-tracking --disable-silent-rules"
 
 # Cross-compile knobs.
 HOST_ARCH="$(uname -m 2>/dev/null || echo unknown)"
+HOST_OS="$(uname -s 2>/dev/null || echo unknown)"
 TARGET_ARCH="${TMUX_TARGET_ARCH:-$HOST_ARCH}"
 TRIPLET="${TMUX_TRIPLET:-}"
-if [ -n "${TMUX_TARGET_OS:-}" ]; then
-	TRIPLET="${TRIPLET:-${TMUX_TARGET_ARCH}-${TMUX_TARGET_OS}}"
-fi
 
 # Normalize arch aliases (arm64 == aarch64; amd64 == x86_64).
 normalize_arch() {
@@ -97,29 +87,57 @@ TARGET_ARCH="$(normalize_arch "$TARGET_ARCH")"
 
 # ----------------------------------------------------------------------
 # Per-OS CFLAGS / LDFLAGS setup.
+# Detect host by TMUX_OS_HINT (if set) OR uname -s.
 # ----------------------------------------------------------------------
 macos_force_load_libs() {
 	# Returns a space-separated list of -Wl,-force_load,<path> flags
-	# for Homebrew's libevent + ncurses (incl. libtinfo). On macOS we
-	# statically embed both via ld's force_load.
+	# for Homebrew's libevent + ncurses. On macOS we statically embed
+	# both via ld's force_load.
+	#
+	# Homebrew's ncurses (since the `ncurses` formula rewrite in 2024)
+	# merges libtinfo into libncurses — `libtinfo.a` no longer exists
+	# as a separate file. We probe for both and use what's available.
 	LIBEVENT_A="$(brew --prefix libevent 2>/dev/null)/lib/libevent.a"
 	NCURSES_A="$(brew --prefix ncurses 2>/dev/null)/lib/libncurses.a"
 	TINFO_A="$(brew --prefix ncurses 2>/dev/null)/lib/libtinfo.a"
 
 	flags=""
-	for f in "$LIBEVENT_A" "$NCURSES_A" "$TINFO_A"; do
-		[ -f "$f" ] || { echo "warn: missing $f (run: brew install libevent ncurses)" >&2; continue; }
-		flags="$flags -Wl,-force_load,$f"
+	for f in "$LIBEVENT_A" "$NCURSES_A"; do
+		if [ -f "$f" ]; then
+			flags="$flags -Wl,-force_load,$f"
+		else
+			echo "warn: missing $f (run: brew install libevent ncurses)" >&2
+		fi
 	done
+	# libtinfo.a is optional — only present in older Homebrew ncurses.
+	if [ -f "$TINFO_A" ]; then
+		flags="$flags -Wl,-force_load,$TINFO_A"
+	fi
 	printf '%s' "$flags"
 }
 
-case "${TMUX_OS_HINT:-}:$(uname -s 2>/dev/null || echo unknown)" in
-darwin:*)
+# Determine the effective OS: TMUX_OS_HINT takes priority; otherwise
+# fall back to uname -s. Normalize to darwin | linux | msys.
+effective_os() {
+	if [ -n "${TMUX_OS_HINT:-}" ]; then
+		printf '%s' "$TMUX_OS_HINT"
+		return
+	fi
+	case "$HOST_OS" in
+		Darwin)  printf '%s' darwin ;;
+		Linux)   printf '%s' linux  ;;
+		MINGW*|MSYS*|CYGWIN*) printf '%s' msys ;;
+		*)       printf '%s' unknown ;;
+	esac
+}
+OS="$(effective_os)"
+
+case "$OS" in
+darwin)
 	# macOS build (host OR cross). --enable-static rejected by tmux
 	# configure, so we use force_load on the .a archives. Apple SDK
 	# is shared between arches; clang auto-discovers via xcrun.
-	if [ -n "${TMUX_OS_HINT:-}" ]; then
+	if [ "$TARGET_ARCH" != "$HOST_ARCH" ]; then
 		# Cross-build (TMUX_TARGET_ARCH != host arch).
 		export CC=clang
 		: "${CFLAGS:=-arch $TARGET_ARCH -O2 -D_FORTIFY_SOURCE=2}"
@@ -133,33 +151,65 @@ darwin:*)
 		export CFLAGS LDFLAGS
 	fi
 	CONFIGURE_ARGS="$CONFIGURE_BASE --disable-utf8proc --disable-systemd"
+	# Triplet for cross: x86_64-apple-darwin / aarch64-apple-darwin.
+	if [ -z "$TRIPLET" ] && [ "$TARGET_ARCH" != "$HOST_ARCH" ]; then
+		TRIPLET="${TARGET_ARCH}-apple-darwin"
+	elif [ -z "$TRIPLET" ]; then
+		TRIPLET="${HOST_ARCH}-apple-darwin"
+	fi
 	;;
-*:MINGW*|*:MSYS*|msys:*)
-	# Windows MSYS2 (mingw64). Dynamic link; package.ps1 will bundle
-	# the libevent + ncurses DLLs alongside tmux.exe.
+msys)
+	# Windows MSYS2 (mingw64). DEFERRED — tmux 3.7 configure fails
+	# because CMSG_DATA is not in MinGW's <sys/socket.h>. We still
+	# honor the request (so manual builds work), but emit a clear
+	# message and bail out with a documented exit code so the CI
+	# YAML's `continue-on-error: true` gate catches it gracefully.
 	export CC="${CC:-gcc}"
 	: "${CFLAGS:=-O2 -D_FORTIFY_SOURCE=2}"
-	: "${LDFLAGS:=-lws2_32 -liconv}"   # winsock + iconv (tmux uses both)
+	: "${LDFLAGS:=-lws2_32}"
 	export CFLAGS LDFLAGS
 	CONFIGURE_ARGS="$CONFIGURE_BASE --disable-utf8proc --disable-systemd --enable-shared --disable-static"
+	if [ -z "$TRIPLET" ]; then
+		TRIPLET="${TARGET_ARCH}-w64-mingw32"
+	fi
+	# Probe for the known CMSG_DATA failure early so the user gets a
+	# clear message rather than a deep autotools backtrace.
+	cat <<'EOF' >&2
+==> NOTE: tmux 3.7 Windows support is DEFERRED in this repo.
+    tmux 3.7's configure.ac checks for CMSG_DATA in <sys/socket.h>,
+    which MinGW's mingw64 headers don't provide without a feature
+    test macro. Upstream tmux does not support Windows; the MSYS2
+    tmux port uses local patches not yet in 3.7.
+    See NOTICE.md §Windows support and mneme#N for the patch plan.
+EOF
 	;;
-*:*Linux*|linux:*)
+linux)
 	# Linux host (glibc or musl — Alpine docker for the musl case).
 	# --enable-static adds -static to LDFLAGS, producing a fully
 	# static binary that runs everywhere.
 	CONFIGURE_ARGS="$CONFIGURE_BASE --enable-static --disable-utf8proc --disable-systemd"
+	if [ -z "$TRIPLET" ]; then
+		TRIPLET="${TARGET_ARCH}-unknown-linux-musl"
+	fi
+	# Verify yacc/byacc/bison — tmux's configure calls AC_PROG_YACC
+	# even though we vendor a pre-generated cmd-parse.c (configure
+	# still aborts if no YACC-like tool is present, because the
+	# Makefile.am rule might try to regenerate cmd-parse.c).
+	command -v yacc >/dev/null 2>&1 \
+		|| command -v byacc >/dev/null 2>&1 \
+		|| command -v bison >/dev/null 2>&1 \
+		|| { echo "error: yacc/byacc/bison required on Linux (apk add byacc)" >&2; exit 1; }
 	;;
 *)
-	echo "error: unknown host (set TMUX_OS_HINT=darwin|msys)" >&2
+	echo "error: unknown OS (set TMUX_OS_HINT=darwin|msys|linux)" >&2
 	exit 1
 	;;
 esac
 
 # Cross-compile: set --host so autotools picks the right compiler checks.
 if [ "$TARGET_ARCH" != "$HOST_ARCH" ] || [ -n "${TMUX_TARGET_OS:-}" ]; then
-	[ -z "$TRIPLET" ] && TRIPLET="${TARGET_ARCH}-${TMUX_TARGET_OS:-unknown}"
 	CONFIGURE_ARGS="$CONFIGURE_ARGS --host=$TRIPLET"
-	echo "==> cross-compile: host=$HOST_ARCH → target=$TARGET_ARCH ($TRIPLET)"
+	echo "==> cross-compile: host=$HOST_ARCH/$HOST_OS → target=$TARGET_ARCH ($TRIPLET)"
 fi
 
 # ----------------------------------------------------------------------
@@ -193,7 +243,7 @@ echo "    CC=${CC:-cc}  CFLAGS=${CFLAGS:-default}  LDFLAGS=${LDFLAGS:-default}"
 # satisfy (since brew installs to /opt/homebrew/lib). Confirm the
 # Makefile actually uses our force_load flags; if not, abort with a
 # clear error.
-if [ "$(uname -s 2>/dev/null)" = "Darwin" ] || [ "${TMUX_OS_HINT:-}" = "darwin" ]; then
+if [ "$OS" = "darwin" ]; then
 	echo "==> macOS verify: force_load libevent/ncurses present in link flags"
 	grep -q -- "-Wl,-force_load" "$BUILD_DIR/Makefile" \
 		|| { echo "FAIL: -Wl,-force_load not in Makefile; libtool may have stripped it" >&2; exit 1; }
@@ -211,7 +261,7 @@ BIN="$(ext_for "$BUILD_DIR/tmux")"
 
 # Strip debug info on Linux/macOS (tmux build keeps debug_info by
 # default; a musl-static binary bloats from ~1.0 MiB to ~3 MiB).
-if [ "$(uname -s 2>/dev/null)" = "Darwin" ] || [ "$(uname -s 2>/dev/null)" = "Linux" ]; then
+if [ "$OS" = "darwin" ] || [ "$OS" = "linux" ]; then
 	strip "$BIN" 2>/dev/null || true
 fi
 

@@ -44,7 +44,7 @@ If you don't use x-cmd, grab the archive for your platform from the
 
 ## Platform matrix
 
-Every release builds **5 targets** via GitHub Actions on native runners
+Every release builds **4 targets** via GitHub Actions on native runners
 (where available) and an Alpine 3.20 docker container for musl-static
 Linux builds:
 
@@ -54,19 +54,15 @@ Linux builds:
 | `aarch64-linux-musl`   | `ubuntu-24.04-arm` + Alpine 3.20 | fully static musl                              | `.tar.xz` |
 | `aarch64-macos`        | `macos-latest`                | static (`-Wl,-force_load` libevent/ncurses); only `/usr/lib/libSystem.B.dylib` linked | `.tar.xz` |
 | `x86_64-macos`         | `macos-latest` (cross from aarch64) | same                                          | `.tar.xz` |
-| `x86_64-windows`*      | `windows-latest` + MSYS2 + mingw64 | dynamic link; libevent + ncurses DLLs bundled alongside `tmux.exe` | `.zip` |
 
-\* `x86_64-windows` is gated with `continue-on-error: true` because
-tmux's pane rendering requires a tty which the MSYS2 bash CI runner
-lacks; the smoke script detects MINGW/MSYS and skips the pty-needing
-checks. The build + package still complete; only the binary's runtime
-behavior on a real tty is unverified at CI time. Users on real
-Windows terminals (mintty / Windows Terminal) report it works.
-
-`aarch64-windows` is **not** in the matrix — MSYS2 MINGW64 doesn't
-ship `mingw-w64-aarch64-gcc` as of 2026-08-06. Tracked in
-[`x-cmd-build/mneme`](https://github.com/x-cmd-build/mneme) for future
-inclusion.
+> **Windows is deferred to v0.2.0.** tmux 3.7's `configure.ac`
+> checks for `CMSG_DATA` in `<sys/socket.h>`, which MinGW's headers
+> don't provide without a feature-test macro. Upstream tmux does
+> **not** officially support Windows; the MSYS2 tmux port uses local
+> patches not yet in 3.7. Windows users should run tmux under WSL
+> (`wsl --install`, then `x eget x-cmd-build/tmux` inside WSL) —
+> the Linux/musl-static binary runs unchanged. See
+> [`NOTICE.md`](NOTICE.md) §Windows support for the v0.2.0 plan.
 
 > **Linux is musl-only.** Each Linux archive is a single fully static
 > binary that runs on Alpine, Debian, Ubuntu, RHEL, Fedora, Arch —
@@ -79,11 +75,9 @@ inclusion.
   *not a dynamic executable*. tmux links statically against
   libevent + ncurses (both .a archives come from Alpine's apk).
 - **macOS**: `-Wl,-force_load` of Homebrew's `libevent.a` +
-  `libncurses.a` + `libtinfo.a`; only `/usr/lib/libSystem.B.dylib`
+  `libncurses.a` (and `libtinfo.a` when present — modern Homebrew
+  merges libtinfo into libncurses); only `/usr/lib/libSystem.B.dylib`
   remains dynamically linked.
-- **Windows**: dynamic link to `libevent-2-1-0.dll`, `libncursesw6.dll`,
-  `libtinfo6.dll` etc. (all co-located with `tmux.exe` in `bin/` —
-  Windows application-local DLL search finds them automatically).
 
 ## Quick check after install
 
@@ -134,8 +128,9 @@ Combined work is **ISC** (upstream tmux is ISC). The wrapper layer
 
 ## Project status
 
-- **v0.1.0** (TBD) — first release; 5-target matrix; based on
-  upstream `tmux 3.7`.
+- **v0.1.0** (TBD) — first release; 4-target matrix
+  (Linux musl x2 + macOS x2); based on upstream `tmux 3.7`. Windows
+  deferred to v0.2.0 (see NOTICE.md).
 
 ## Related
 

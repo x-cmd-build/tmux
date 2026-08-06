@@ -16,10 +16,12 @@
 # host-Linux branch picks --enable-static), after `apk add`-ing the
 # musl-native toolchain + libevent/ncurses dev headers (Alpine's apk
 # ships static .a libs for both, so the --enable-static flag in
-# tmux's configure can statically link them).
+# tmux's configure can statically link them) + bison/byacc (tmux's
+# configure calls AC_PROG_YACC and aborts if absent, even though we
+# vendor the pre-generated cmd-parse.c).
 set -eu
 
-echo "==> apk add: build deps (musl-native toolchain + libevent-dev + ncurses-dev)"
+echo "==> apk add: build deps (musl-native toolchain + libevent-dev + ncurses-dev + bison)"
 apk add --no-cache \
 	build-base \
 	bash \
@@ -29,6 +31,8 @@ apk add --no-cache \
 	pkgconfig \
 	git \
 	linux-headers \
+	bison \
+	byacc \
 	libevent-dev \
 	libevent-static \
 	ncurses-dev \

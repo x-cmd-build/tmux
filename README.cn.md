@@ -39,7 +39,7 @@ x eget x-cmd-build/tmux       # ~1.0 MiB，零依赖，多架构静态构建
 
 ## 平台矩阵
 
-每次发布通过 GitHub Actions 构建 **5 个 target**（原生 runner 加
+每次发布通过 GitHub Actions 构建 **4 个 target**（原生 runner 加
 Alpine 3.20 docker 容器做 musl-static Linux 构建）：
 
 | target                 | runner                        | 链接方式                                                | 归档       |
@@ -48,16 +48,15 @@ Alpine 3.20 docker 容器做 musl-static Linux 构建）：
 | `aarch64-linux-musl`   | `ubuntu-24.04-arm` + Alpine 3.20 | 完全静态 musl                                       | `.tar.xz`  |
 | `aarch64-macos`        | `macos-latest`                | 静态（`-Wl,-force_load` libevent/ncurses）；只动态链接 `/usr/lib/libSystem.B.dylib` | `.tar.xz` |
 | `x86_64-macos`         | `macos-latest`（从 aarch64 交叉） | 同上                                                | `.tar.xz`  |
-| `x86_64-windows`*      | `windows-latest` + MSYS2 + mingw64 | 动态链接；libevent + ncurses DLL 与 `tmux.exe` 同目录打包 | `.zip`     |
 
-\* `x86_64-windows` 用 `continue-on-error: true` 限制，因为 tmux
-的面板渲染需要 tty，而 MSYS2 bash CI runner 没有。smoke 脚本检测
-MINGW/MSYS 并跳过需要 pty 的检查；构建 + 打包仍正常完成。真实
-Windows 终端（mintty / Windows Terminal）的用户反馈正常工作。
-
-`aarch64-windows` **不在**矩阵里 —— MSYS2 MINGW64 截至 2026-08-06
-仍未打包 `mingw-w64-aarch64-gcc`。未来纳入时间跟踪在
-[`x-cmd-build/mneme`](https://github.com/x-cmd-build/mneme)。
+> **Windows 推迟到 v0.2.0。** tmux 3.7 的 `configure.ac` 检查
+> `<sys/socket.h>` 里的 `CMSG_DATA`，MinGW 的头文件没有这个宏
+> （Windows 用 Winsock 的 `WSA_CMSG_DATA` 系列）。上游 tmux **不**
+> 官方支持 Windows；MSYS2 的 tmux 移植用了本地补丁，但还没合到
+> 3.7。Windows 用户请在 WSL 里跑 tmux（`wsl --install` 后 `x eget
+> x-cmd-build/tmux`）—— Linux/musl-static 二进制在 WSL 里直接可用。
+> 详细推迟原因和 v0.2.0 计划见
+> [`NOTICE.md`](NOTICE.md) §Windows support。
 
 > **Linux 仅 musl。** 每个 Linux 归档都是单一完全静态二进制，可
 > 在 Alpine、Debian、Ubuntu、RHEL、Fedora、Arch —— 所有 Linux 发行版
@@ -69,11 +68,9 @@ Windows 终端（mintty / Windows Terminal）的用户反馈正常工作。
   dynamic executable*。tmux 静态链接 libevent + ncurses（两者 .a 都
   来自 Alpine apk）。
 - **macOS**：`-Wl,-force_load` Homebrew 的 `libevent.a` +
-  `libncurses.a` + `libtinfo.a`；只 `/usr/lib/libSystem.B.dylib`
+  `libncurses.a`（以及 `libtinfo.a`，如果存在 —— 现代 Homebrew
+  把 libtinfo 合并到 libncurses）；只 `/usr/lib/libSystem.B.dylib`
   动态链接。
-- **Windows**：动态链接到 `libevent-2-1-0.dll`、`libncursesw6.dll`、
-  `libtinfo6.dll` 等（全部与 `tmux.exe` 一起放在 `bin/` —— Windows
-  应用本地 DLL 搜索自动找到它们）。
 
 ## 安装后快速验证
 
@@ -123,7 +120,9 @@ git archive --prefix=upstream/tmux/ <new-tag> | tar x
 
 ## 项目状态
 
-- **v0.1.0**（待定）—— 首次发布；5-target 矩阵；基于上游 `tmux 3.7`。
+- **v0.1.0**（待定）—— 首次发布；4-target 矩阵（Linux musl x2 +
+  macOS x2）；基于上游 `tmux 3.7`。Windows 推迟到 v0.2.0（见
+  NOTICE.md）。
 
 ## 相关
 

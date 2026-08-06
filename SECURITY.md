@@ -45,10 +45,9 @@ All release binaries are built with:
 | `aarch64-linux-musl`   | fully static — same                           |
 | `aarch64-macos`        | static (`-Wl,-force_load`) — only `/usr/lib/libSystem.B.dylib` |
 | `x86_64-macos`         | static (`-Wl,-force_load`) — same             |
-| `x86_64-windows`       | bundled DLLs co-located with `tmux.exe`       |
 
 A self-contained binary that depends only on the C library (Linux) or
-the platform SDK (macOS/Windows) has a smaller attack surface than a
+the platform SDK (macOS) has a smaller attack surface than a
 dynamically-linked build that can be subverted via `LD_PRELOAD` /
 `DYLD_INSERT_LIBRARIES` / DLL hijacking.
 

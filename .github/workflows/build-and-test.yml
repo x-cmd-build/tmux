@@ -1,16 +1,18 @@
 name: build-and-test
 
-# Auto-test stage: push / PR → builds all 5 targets, runs smoke, uploads
+# Auto-test stage: push / PR → builds all 4 targets, runs smoke, uploads
 # artifacts. No release publish.
 #
 # Splits with `release.yml`:
 #   - tag push / dispatch → release.yml (publish stage)
 #
-# Matrix mirrors the ljh-sh vendored-C dist regime: 4 fully-shipped +
-# 2 continue-on-error gates. tmux is shipped for 4 targets (the same
-# 4 as ljh-sh/iperf); the two Windows targets are gated until MSYS2
-# closes its mingw-w64-aarch64-gcc gap (aarch64) and the libevent
-# MSYS2 packaging stabilizes for mingw64 (x86_64).
+# Matrix mirrors the ljh-sh vendored-C dist regime: 4 fully-shipped
+# targets (Linux musl x2 + macOS x2). Windows is DEFERRED to v0.2.0
+# because tmux 3.7's configure.ac checks for CMSG_DATA in
+# <sys/socket.h>, which MinGW's headers don't provide without a
+# feature test macro; upstream tmux does not officially support
+# Windows. See NOTICE.md §Windows support and mneme#N for the patch
+# plan.
 on:
   push:
     branches: [main]
@@ -37,17 +39,8 @@ jobs:
           - { target: aarch64-linux-musl,  runner: ubuntu-24.04-arm, os: linux,   libc: musl, docker_arch: arm64 }
           - { target: aarch64-macos,       runner: macos-latest,     os: macos                  }
           - { target: x86_64-macos,        runner: macos-latest,     os: macos                  }
-          - { target: x86_64-windows,      runner: windows-latest,   os: windows                }
-    # x86_64-windows: continue-on-error due to a known tmux-on-MinGW
-    # limitation — tmux needs a tty for pane rendering, and the MSYS2
-    # bash CI runner lacks one. The smoke script detects MINGW/MSYS and
-    # skips the pty-needing checks; only #1 (version) + #4 (config
-    # parse) + #6 (control mode) are exercised. We still attempt the
-    # build + package but don't fail the PR if Windows regresses.
-    # aarch64-windows: NOT in the matrix — MSYS2 MINGW64 doesn't ship
-    # mingw-w64-aarch64-gcc as of 2026-08-06. Tracked in mneme#N for
-    # future inclusion.
-    continue-on-error: ${{ matrix.target == 'x86_64-windows' }}
+          # x86_64-windows: DEFERRED to v0.2.0 — see scripts/build.sh
+          # `msys` branch and NOTICE.md §Windows support.
     env:
       TARGET: ${{ matrix.target }}
     steps:
@@ -65,25 +58,10 @@ jobs:
           brew install bash autoconf automake libtool pkg-config
           brew install libevent ncurses
 
-      - name: Install deps (Windows MSYS2 + mingw64 + libevent/ncurses)
-        if: matrix.os == 'windows'
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: MINGW64
-          update: true
-          install: >-
-            git
-            base-devel
-            mingw-w64-x86_64-toolchain
-            mingw-w64-x86_64-autotools
-            mingw-w64-x86_64-libevent
-            mingw-w64-x86_64-ncurses
-            mingw-w64-x86_64-pkg-config
-
       # ---- build + smoke ----
       # Musl: a single Alpine `docker run` does build + smoke.
-      # Alpine's apk brings build-base, bash, libevent-dev + ncurses-dev
-      # (static .a) — everything scripts/build-alpine.sh needs.
+      # Alpine's apk brings build-base, bash, bison, libevent-dev +
+      # ncurses-dev (static .a) — everything scripts/build-alpine.sh needs.
       - name: Build + smoke on Alpine (musl)
         if: matrix.libc == 'musl'
         run: docker run --rm --platform linux/${{ matrix.docker_arch }} -v "$PWD":/w -w /w alpine:3.20 sh -c 'apk add --no-cache bash >/dev/null && bash /w/scripts/build-alpine.sh && bash /w/scripts/smoke.sh'
@@ -95,6 +73,8 @@ jobs:
         run: bash scripts/build.sh && bash scripts/smoke.sh
 
       # macOS x86_64: cross-compile via clang -arch (Apple SDK is shared).
+      # build.sh auto-derives the triplet `x86_64-apple-darwin` from the
+      # OS hint + target arch.
       - name: Build (macOS x86_64 — cross from aarch64)
         if: matrix.target == 'x86_64-macos'
         env:
@@ -102,37 +82,9 @@ jobs:
           TMUX_OS_HINT: darwin
         run: bash scripts/build.sh && bash scripts/smoke.sh
 
-      # Windows x86_64: msys2 bash + MinGW cross toolchain.
-      - name: Build (Windows x86_64 — msys2 bash)
-        if: matrix.os == 'windows'
-        shell: msys2 {0}
-        env:
-          TMUX_OS_HINT: msys
-        run: bash scripts/build.sh
-
-      # Windows smoke (informational; no tty for pty-needing checks).
-      - name: Smoke test on Windows (informational)
-        if: matrix.os == 'windows'
-        shell: msys2 {0}
-        continue-on-error: true
-        run: |
-          set +e
-          cd "$GITHUB_WORKSPACE"
-          export BUILD_DIR="$GITHUB_WORKSPACE/build"
-          bash scripts/smoke.sh 2>&1 | tail -30
-          echo "OK: smoke ran (some checks skip on Windows — see scripts/smoke.sh WINDOWS_SMOKE branch)"
-
       # ---- package ----
       - name: Package (Linux / macOS)
-        if: matrix.os != 'windows'
         run: TARGET=${{ matrix.target }} bash scripts/package.sh
-
-      - name: Package (Windows)
-        if: matrix.os == 'windows'
-        shell: msys2 {0}
-        env:
-          TARGET: ${{ matrix.target }}
-        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/package.ps1
 
       # ---- verify self-contained ----
       - name: Verify self-contained (Linux)
@@ -155,19 +107,10 @@ jobs:
             && { echo "FAIL: $bin links Homebrew dylibs"; exit 1; } || true
           echo "OK: only system libs (/usr/lib, /System/Library)"
 
-      - name: Show file type & size (Linux/macOS)
-        if: matrix.os != 'windows'
+      - name: Show file type & size
         run: |
           file dist/tmux-${{ matrix.target }}/bin/tmux
           du -h dist/tmux-${{ matrix.target }}.tar.xz
-
-      - name: Show file type & size (Windows)
-        if: matrix.os == 'windows'
-        shell: pwsh
-        run: |
-          $exe = "dist/tmux-${{ matrix.target }}/bin/tmux.exe"
-          file $exe
-          Get-ChildItem "dist/tmux-${{ matrix.target }}.zip" | Format-Table Name, Length
 
       # ---- upload artifact (for human inspection; NOT a release) ----
       - name: Upload test artifact

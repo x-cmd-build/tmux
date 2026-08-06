@@ -49,9 +49,31 @@ tmux links against two runtime libraries at build time:
   <https://invisible-island.net/ncurses/>.
 
 Both libraries are linked statically into the tmux binary on Linux and
-macOS (`-Wl,-force_load` + `.a` archive on macOS). On Windows, the
-statically-linked DLLs are placed alongside `tmux.exe` (Windows
-application-local DLL search).
+macOS (`-Wl,-force_load` + `.a` archive on macOS).
+
+## Windows support (DEFERRED — not in v0.1.0)
+
+tmux 3.7 does **not officially support Windows**. The
+`configure.ac`'s CMSG_DATA check (looking for `CMSG_DATA` in
+`<sys/socket.h>`) fails on MinGW because Windows uses the Winsock
+`WSA_CMSG_DATA` macro family instead.
+
+The MSYS2 community port of tmux ships local patches that work around
+this, but those patches are not yet upstream in tmux 3.7. As a
+result, **v0.1.0 of `x-cmd-build/tmux` does not ship a Windows
+build**.
+
+A future release (v0.2.0) will either:
+
+1. Wait for upstream tmux to merge Windows portability fixes
+   (track <https://github.com/tmux/tmux/issues>), or
+2. Carry a local patch under `patches/` that adds the necessary
+   feature-test macros (`_WIN32_WINNT=0x0601`, `CMSG_DATA` macro
+   shim) — see mneme#N for the patch design.
+
+In the meantime, Windows users should run tmux under WSL (`wsl
+--install` then `x eget x-cmd-build/tmux` inside WSL). The
+Linux/musl-static binary runs unchanged inside WSL.
 
 ## Why this notice exists
 

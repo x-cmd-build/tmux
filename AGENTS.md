@@ -7,10 +7,11 @@
 
 ## TL;DR for AI agents
 
-- **What**: portable tmux 3.7 (latest stable as of 2026-08-06), 5-platform
+- **What**: portable tmux 3.7 (latest stable as of 2026-08-06), 4-platform
   CI build. Resolves x-cmd/x-cmd#397 (tmux version was pinned to `0.1`
   while x eget actually pulled tmux 3.2a — version numbers misaligned
-  with upstream).
+  with upstream). Windows deferred to v0.2.0 — tmux 3.7 doesn't
+  officially support Windows (CMSG_DATA check fails on MinGW).
 - **Source**: vendored under `upstream/tmux/` via `git archive` from
   <https://github.com/tmux/tmux/releases/tag/3.7>.
 - **Build**: GitHub Actions only (`build-and-test.yml` + `release.yml`).
