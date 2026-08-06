@@ -339,6 +339,44 @@ SHIM
 	cat > "$COMPAT_INC/sys/user.h" <<'SHIM'
 /* shim */
 SHIM
+	# sys/socket.h: mingw-w64 doesn't ship sys/socket.h; users go
+	# directly through Winsock2 (<winsock2.h>). shim sys/socket.h
+	# to pull in Winsock2 + provide CMSG_DATA so tmux's source
+	# compiles. The configure-time CMSG_DATA check is also bypassed
+	# via the configure.ac patch above.
+	cat > "$COMPAT_INC/sys/socket.h" <<'SHIM'
+/* shim: mingw-w64 lacks sys/socket.h. Pull in Winsock2 + provide
+ * CMSG_DATA so tmux's source compiles. */
+#ifndef _SYS_SOCKET_H_SHIM
+#define _SYS_SOCKET_H_SHIM
+#include <winsock2.h>
+#include <ws2tcpip.h>
+struct cmsghdr {
+    size_t cmsg_len;
+    int    cmsg_level;
+    int    cmsg_type;
+};
+#define CMSG_DATA(cmsg) ((unsigned char *)(((struct cmsghdr *)(cmsg)) + 1))
+#define CMSG_NXTHDR(mhdr, cmsg) ((struct cmsghdr *)0)
+#define CMSG_FIRSTHDR(mhdr) ((struct cmsghdr *)0)
+#endif
+SHIM
+	# sys/un.h: mingw-w64 doesn't provide Unix domain sockets.
+	# tmux uses AF_UNIX for socketpair; stub struct sockaddr_un so
+	# compilation succeeds. Runtime AF_UNIX calls won't work on
+	# Windows (no Unix sockets), but tmux-on-Windows-git-bash isn't
+	# expected to use them anyway.
+	cat > "$COMPAT_INC/sys/un.h" <<'SHIM'
+/* shim: mingw-w64 lacks sys/un.h. Stub sockaddr_un for compilation. */
+#ifndef _SYS_UN_H_SHIM
+#define _SYS_UN_H_SHIM
+#define AF_UNIX 1
+struct sockaddr_un {
+    unsigned short sun_family;
+    char          sun_path[108];
+};
+#endif
+SHIM
 	# sys/ioctl.h: compat.h uses it for TIOCGWINSZ. Provide a stub.
 	cat > "$COMPAT_INC/sys/ioctl.h" <<'SHIM'
 /* shim: tmux uses TIOCGWINSZ (via ioctl) for terminal size. */
