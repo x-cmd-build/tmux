@@ -47,7 +47,16 @@ ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 SRC="${TMUX_SRC:-$ROOT/upstream/tmux}"
 BUILD_DIR="${BUILD_DIR:-$ROOT/build}"
 
-TMUX_VERSION="${TMUX_VERSION:-3.7}"
+TMUX_VERSION="${TMUX_VERSION:-3.7b}"
+
+# Windows-specific configure additions.
+# MSYS2 PKGBUILD for tmux 3.7b has zero patches — just CPPFLAGS that
+# undefine _XOPEN_SOURCE and force ncursesw (wide-char) headers. This
+# bypasses tmux's CMSG_DATA check (which fails on MinGW because Win-
+# sock uses WSA_CMSG_DATA instead). See scripts/build.sh history —
+# this is the v0.2.0 revert of the v0.1.0 'Windows DEFERRED' claim.
+TMUX_MSYS_CPPFLAGS="-U_XOPEN_SOURCE -I/usr/include/ncursesw"
+TMUX_MSYS_CONFIGURE_ARGS="--enable-sixel --prefix=/usr"
 
 [ -f "$SRC/configure.ac" ] \
 	|| { echo "error: $SRC/configure.ac not found (vendoring incomplete?)" >&2; exit 1; }
