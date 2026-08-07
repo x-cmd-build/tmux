@@ -63,11 +63,9 @@ jobs:
             mingw-w64-x86_64-pkg-config
             mingw-w64-x86_64-gettext
 
-      - name: Build (Windows x86_64 — msys2 bash + mingw64)
+      - name: Build (Windows x86_64 — msys2 bash + mingw64, PKGBUILD shape)
         shell: msys2 {0}
-        env:
-          TMUX_OS_HINT: msys
-        run: bash scripts/build.sh && bash scripts/smoke.sh
+        run: bash scripts/build-msys2.sh && bash scripts/smoke-msys2.sh build-msys2/tmux.exe
 
       - name: Package (Windows)
         shell: msys2 {0}
