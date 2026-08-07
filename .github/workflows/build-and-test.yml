@@ -16,8 +16,26 @@ name: build-and-test
 on:
   push:
     branches: [main]
+    paths:
+      - 'scripts/build.sh'
+      - 'scripts/smoke.sh'
+      - 'scripts/build-alpine.sh'
+      - 'scripts/package.sh'
+      - 'scripts/package.ps1'
+      - 'upstream/tmux/**'
+      - 'Dockerfile'
+      - '.github/workflows/build-and-test.yml'
   pull_request:
     branches: [main]
+    paths:
+      - 'scripts/build.sh'
+      - 'scripts/smoke.sh'
+      - 'scripts/build-alpine.sh'
+      - 'scripts/package.sh'
+      - 'scripts/package.ps1'
+      - 'upstream/tmux/**'
+      - 'Dockerfile'
+      - '.github/workflows/build-and-test.yml'
   workflow_dispatch:
 
 permissions:
