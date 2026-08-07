@@ -196,6 +196,11 @@ msys)
 #define CMSG_DATA(cmsg) ((unsigned char *)(((struct cmsghdr *)(cmsg)) + 1))
 #endif
 SHIM
+	# sys/uio.h: tmux.h includes it unconditionally. MSYS2's mingw-w64
+	# fork has it (vestigial — no source uses iovec). Empty shim.
+	cat > "$COMPAT_INC/sys/uio.h" <<'SHIM'
+/* shim: tmux source doesn't use iovec; provide an empty placeholder. */
+SHIM
 	export CC="${CC:-gcc}"
 	: "${CFLAGS:=-O2 -D_FORTIFY_SOURCE=2}"
 	: "${LDFLAGS:=-lws2_32}"
