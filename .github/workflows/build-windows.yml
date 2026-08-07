@@ -1,29 +1,21 @@
 name: build-windows
 
-# Windows-only build. Detached from build-and-test.yml so iterating on
-# Windows shims doesn't repeatedly rebuild Linux + macOS (4 matrix
-# entries = ~10 min of CI minutes per push).
+# Windows-only build. Dispatch-only (no push / pull_request triggers).
+# See feedback-ci-explicit-dispatch memory.
 #
-# Triggers:
-#   - push / PR: changes to scripts/build.sh, scripts/compat-windows.c,
-#                 scripts/build-windows-*.sh
-#   - push: changes to upstream/tmux/ (vendored source)
-#   - workflow_dispatch: manual
+# v0.2.0 strategy (option A from issue #1): build in MSYS shell with
+# msys gcc (not mingw-w64). Same approach MSYS2's official tmux package
+# uses. Output tmux.exe links msys-2.0.dll; package.ps1 bundles the
+# DLL alongside the .exe so end-users don't need an MSYS2 install.
 #
-# Diff vs build-and-test.yml:
-#   - matrix.os/windows ONLY (filters out linux, macos)
-#   - reuses the same MSYS2 install + build.sh MSYS2 path
-#   - emits a single artifact (tmux-x86_64-windows.zip)
-#
-# v0.2.0 ships shared + DLL bundle (build-artifact = tmux.exe +
-# libevent-2-1-0.dll + libncursesw6.dll + libtinfo6.dll co-located in
-# bin/). Self-contained via Windows app-local DLL search. NOT
-# statically linked — see static-build ruleset for the platform
-# exception note.
+# Why not mingw-w64: tmux 3.7b is deeply POSIX-dependent
+# (sys/queue.h, sys/tree.h, sys/wait.h, termios, fnmatch, etc.).
+# mingw-w64 ships only a small subset; full port needs 200+ lines of
+# patch. The MSYS shell + msys gcc provides a complete POSIX header
+# set, the same environment MSYS2 uses to ship tmux.
 
 # DISPATCH-ONLY: no push, no pull_request triggers. CI is run explicitly
-# via `gh workflow run build-windows` (or the web UI's "Run workflow"
-# button). Avoids burning minutes on every commit.
+# via `gh workflow run build-windows`.
 on:
   workflow_dispatch:
 
@@ -48,25 +40,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install deps (MSYS2 + mingw64 + libevent/ncurses + libmangle)
+      - name: Install deps (MSYS2 + msys gcc + ncurses/libevent)
         uses: msys2/setup-msys2@v2
         with:
-          msystem: MINGW64
+          msystem: MSYS
           update: true
           install: >-
             git
             base-devel
-            mingw-w64-x86_64-toolchain
-            mingw-w64-x86_64-autotools
-            mingw-w64-x86_64-libevent
-            mingw-w64-x86_64-ncurses
-            mingw-w64-x86_64-libmangle
-            mingw-w64-x86_64-pkgconf
-            mingw-w64-x86_64-gettext
+            gcc
+            autoconf
+            automake
+            libtool
+            pkg-config
+            make
+            ncurses-devel
+            libevent-devel
 
-      - name: Build (Windows x86_64 — msys2 bash + mingw64, PKGBUILD shape)
+      - name: Build (Windows x86_64 — MSYS shell + msys gcc, PKGBUILD verbatim)
         shell: msys2 {0}
-        run: bash scripts/build-msys2.sh && bash scripts/smoke-msys2.sh build-msys2/tmux.exe
+        run: bash scripts/build-msys2.sh && bash scripts/smoke-msys2.sh upstream/tmux/tmux.exe
 
       - name: Package (Windows)
         shell: msys2 {0}
