@@ -70,19 +70,20 @@ jobs:
       - name: Verify self-contained (Windows)
         shell: pwsh
         run: |
-          $exe = "dist/${{ matrix.target }}/bin/tmux.exe"
-          $exists = Test-Path $exe
-          if (-not $exists) { throw "missing: $exe (build failed)" }
+          # package.ps1 puts outputs in dist/tmux-$target (matching
+          # the standard ljh-sh dist layout: dist/tmux-<target>/).
+          $exe = "dist/tmux-${{ matrix.target }}/bin/tmux.exe"
+          if (-not (Test-Path $exe)) { throw "missing: $exe (build failed)" }
           $size = (Get-Item $exe).Length
           Write-Host "tmux.exe size: $size bytes"
-          Get-ChildItem "dist/${{ matrix.target }}/bin/" | Format-Table Name, Length
+          Get-ChildItem "dist/tmux-${{ matrix.target }}/bin/" | Format-Table Name, Length
 
       - name: Show file type & size (Windows)
         shell: pwsh
         run: |
-          $exe = "dist/${{ matrix.target }}/bin/tmux.exe"
+          $exe = "dist/tmux-${{ matrix.target }}/bin/tmux.exe"
           file $exe
-          Get-ChildItem "dist/${{ matrix.target }}.zip" | Format-Table Name, Length
+          Get-ChildItem "dist/tmux-${{ matrix.target }}.zip" | Format-Table Name, Length
 
       - name: Upload test artifact
         uses: actions/upload-artifact@v4

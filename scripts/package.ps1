@@ -38,38 +38,27 @@ New-Item -ItemType Directory -Path $binDir -Force | Out-Null
 # 1. tmux.exe
 Copy-Item $srcBin (Join-Path $binDir 'tmux.exe')
 
-# 2. Bundle runtime DLLs alongside tmux.exe. Search order:
-#    C:\msys64\usr\bin   (MSYS runtime + MSYS libevent/ncurses)
-#    C:\msys64\mingw64\bin (mingw64 libevent/ncurses fallback)
-#    PATH (last resort)
-$msysRoots = @('C:\msys64\usr\bin', 'C:\msys64\mingw64\bin')
-$dllNames = @(
-    'msys-2.0.dll',
-    'libevent-2-1-0.dll',
-    'libevent_core-2-1-0.dll',
-    'libevent_extra-2-1-0.dll',
-    'libncursesw6.dll',
-    'libtinfo6.dll'
-)
-foreach ($dll in $dllNames) {
-    $found = $null
-    foreach ($rootDir in $msysRoots) {
-        $candidate = Join-Path $rootDir $dll
-        if (Test-Path $candidate) {
-            $found = $candidate
-            break
+# 2. Bundle runtime DLLs alongside tmux.exe. Read the full ldd output
+#    that build-msys2.sh wrote to dist-dll-deps.txt. Each line is an
+#    absolute path to a DLL tmux.exe links. Copy each into bin/.
+#
+#    Why not name-based search: libevent/ncurses DLLs may live in
+#    /usr/lib, /usr/bin, /mingw64/bin depending on repo + version.
+#    The build step already resolved them via ldd, so we trust that.
+$depsFile = Join-Path $root 'dist-dll-deps.txt'
+if (Test-Path $depsFile) {
+    Get-Content $depsFile | ForEach-Object {
+        $src = $_.Trim()
+        if ($src -and (Test-Path $src)) {
+            $name = Split-Path $src -Leaf
+            Copy-Item $src (Join-Path $binDir $name) -Force
+            Write-Output "    bundle: $name (from $src)"
+        } else {
+            Write-Warning "WARN: ldd entry not found: $src"
         }
     }
-    if ($null -eq $found) {
-        $cmd = Get-Command -Name $dll -ErrorAction SilentlyContinue
-        if ($null -ne $cmd) { $found = $cmd.Source }
-    }
-    if ($found) {
-        Copy-Item $found (Join-Path $binDir $dll) -Force
-        Write-Output "    bundle: $dll (from $found)"
-    } else {
-        Write-Warning "WARN: $dll not found, tmux.exe may fail to start"
-    }
+} else {
+    Write-Warning "WARN: $depsFile not found - skipping DLL bundle. Run scripts/build-msys2.sh first."
 }
 
 # 3. Man page + example config

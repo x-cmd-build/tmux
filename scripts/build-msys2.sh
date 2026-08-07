@@ -106,7 +106,13 @@ ls -la "$SRC/tmux.exe"
 file "$SRC/tmux.exe" 2>/dev/null || true
 
 echo "==> runtime DLL deps (package.ps1 will bundle these):"
+# Write full ldd output (paths + basenames) to a file package.ps1
+# reads, so it can find each DLL regardless of which MSYS2 dir it
+# lives in (libevent/ncurses DLLs may be in /usr/lib or /usr/bin
+# depending on repo + version).
+DLL_DEPS_FILE="$ROOT/dist-dll-deps.txt"
+mkdir -p "$(dirname "$DLL_DEPS_FILE")"
 ldd "$SRC/tmux.exe" 2>/dev/null \
 	| awk '/=> *[^ ]+\.(dll|DLL)/ {print $3}' \
-	| xargs -I{} basename {} \
-	| sort -u || true
+	| sort -u > "$DLL_DEPS_FILE" || true
+cat "$DLL_DEPS_FILE"
