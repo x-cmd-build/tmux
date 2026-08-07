@@ -1,7 +1,11 @@
 name: build-and-test
 
-# Auto-test stage: push / PR → builds all 4 targets, runs smoke, uploads
-# artifacts. No release publish.
+# DISPATCH-ONLY build matrix. Triggered manually via
+# `gh workflow run build-and-test` (or the web UI's "Run workflow"
+# button). NO push / pull_request triggers — every CI run is explicit.
+#
+# 5 targets: 2 Linux musl + 2 macOS + 1 Windows.
+# Builds, runs smoke, uploads artifacts. No release publish.
 #
 # Splits with `release.yml`:
 #   - tag push / dispatch → release.yml (publish stage)
@@ -13,29 +17,10 @@ name: build-and-test
 # feature test macro; upstream tmux does not officially support
 # Windows. See NOTICE.md §Windows support and mneme#N for the patch
 # plan.
+# DISPATCH-ONLY: no push, no pull_request triggers. CI is run explicitly
+# via `gh workflow run build-and-test` (or the web UI's "Run workflow"
+# button). Avoids burning minutes on every commit.
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'scripts/build.sh'
-      - 'scripts/smoke.sh'
-      - 'scripts/build-alpine.sh'
-      - 'scripts/package.sh'
-      - 'scripts/package.ps1'
-      - 'upstream/tmux/**'
-      - 'Dockerfile'
-      - '.github/workflows/build-and-test.yml'
-  pull_request:
-    branches: [main]
-    paths:
-      - 'scripts/build.sh'
-      - 'scripts/smoke.sh'
-      - 'scripts/build-alpine.sh'
-      - 'scripts/package.sh'
-      - 'scripts/package.ps1'
-      - 'upstream/tmux/**'
-      - 'Dockerfile'
-      - '.github/workflows/build-and-test.yml'
   workflow_dispatch:
 
 permissions:

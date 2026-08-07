@@ -21,23 +21,10 @@ name: build-windows
 # statically linked — see static-build ruleset for the platform
 # exception note.
 
+# DISPATCH-ONLY: no push, no pull_request triggers. CI is run explicitly
+# via `gh workflow run build-windows` (or the web UI's "Run workflow"
+# button). Avoids burning minutes on every commit.
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'scripts/build.sh'
-      - 'scripts/compat-windows.c'
-      - 'scripts/build-windows*'
-      - 'upstream/tmux/**'
-      - '.github/workflows/build-windows.yml'
-  pull_request:
-    branches: [main]
-    paths:
-      - 'scripts/build.sh'
-      - 'scripts/compat-windows.c'
-      - 'scripts/build-windows*'
-      - 'upstream/tmux/**'
-      - '.github/workflows/build-windows.yml'
   workflow_dispatch:
 
 permissions:
