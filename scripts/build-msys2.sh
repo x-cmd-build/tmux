@@ -25,7 +25,15 @@ esac
 command -v gcc >/dev/null 2>&1 \
 	|| { echo "error: gcc not on PATH (is this a mingw64 shell?)" >&2; exit 1; }
 
-for pkg in ncurses-devel libevent-devel autotools; do
+# PKGBUILD's makedepends ('ncurses-devel' 'libevent-devel' 'autotools')
+# refer to the MSYS repo package names. We're in the MINGW64 shell, so
+# the actual installed packages are:
+#   ncurses-devel       → mingw-w64-x86_64-ncurses-devel
+#   libevent-devel      → mingw-w64-x86_64-libevent-devel
+#   autotools           → mingw-w64-x86_64-autotools (and msys autoconf/automake)
+# The CI workflow installs the runtime variants; the *-devel subpackages
+# are what provide headers + link libs.
+for pkg in mingw-w64-x86_64-ncurses-devel mingw-w64-x86_64-libevent-devel mingw-w64-x86_64-autotools; do
 	pacman -Qq "$pkg" >/dev/null 2>&1 \
 		|| { echo "error: missing makedepend '$pkg' — run: pacman -S $pkg" >&2; exit 1; }
 done

@@ -48,7 +48,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install deps (MSYS2 + mingw64 + libevent/ncurses)
+      - name: Install deps (MSYS2 + mingw64 + libevent/ncurses + -devel)
         uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
@@ -59,8 +59,10 @@ jobs:
             mingw-w64-x86_64-toolchain
             mingw-w64-x86_64-autotools
             mingw-w64-x86_64-libevent
+            mingw-w64-x86_64-libevent-devel
             mingw-w64-x86_64-ncurses
-            mingw-w64-x86_64-pkg-config
+            mingw-w64-x86_64-ncurses-devel
+            mingw-w64-x86_64-pkgconf
             mingw-w64-x86_64-gettext
 
       - name: Build (Windows x86_64 — msys2 bash + mingw64, PKGBUILD shape)
