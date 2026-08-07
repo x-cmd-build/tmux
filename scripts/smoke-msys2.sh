@@ -8,7 +8,7 @@
 
 set -eu
 
-BIN="${1:-build-msys2/tmux.exe}"
+BIN="${1:-upstream/tmux/tmux.exe}"
 
 if [ ! -x "$BIN" ]; then
 	echo "FAIL: $BIN not found or not executable"
