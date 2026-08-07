@@ -5,7 +5,7 @@
 # Self-containedness: v0.2.0 builds in the MSYS shell with msys gcc,
 # so tmux.exe links msys-2.0.dll (the MSYS2 runtime, just like
 # MSYS2's official tmux package). End users get a self-extracting
-# bundle: extract zip, cd bin, ./tmux.exe — no MSYS2 install needed.
+# bundle: extract zip, cd bin, ./tmux.exe - no MSYS2 install needed.
 #
 # Windows application-local DLL search: tmux.exe is in bin/, and
 # Windows searches that directory first for DLL dependencies, so
@@ -17,12 +17,11 @@ $root    = (Resolve-Path "$PSScriptRoot/..").Path
 $target  = $env:TARGET
 if (-not $target) { throw 'TARGET env var required (e.g. x86_64-windows)' }
 
-# tmux.exe is built in-tree by build-msys2.sh, so it's at
-# upstream/tmux/tmux.exe (NOT build/tmux.exe like the old build.sh path).
+# tmux.exe is built in-tree by build-msys2.sh.
 $srcBin = Join-Path $root 'upstream/tmux/tmux.exe'
 if (-not (Test-Path $srcBin)) {
-    # Fall back to old build/tmux.exe in case the build.sh MSYS2 path
-    # ever runs.
+    # Fall back to old build/tmux.exe (used by build.sh MSYS2 branch
+    # if it ever runs).
     $altBin = Join-Path $root 'build/tmux.exe'
     if (Test-Path $altBin) {
         $srcBin = $altBin
@@ -36,24 +35,16 @@ if (Test-Path $outDir) { Remove-Item -Recurse -Force $outDir }
 $binDir = Join-Path $outDir 'bin'
 New-Item -ItemType Directory -Path $binDir -Force | Out-Null
 
-# ─── 1. tmux.exe ────────────────────────────────────────────────────────
+# 1. tmux.exe
 Copy-Item $srcBin (Join-Path $binDir 'tmux.exe')
 
-# ─── 2. Bundle msys-2.0.dll + libevent + ncurses DLLs ─────────────────
-# tmux.exe links against these at runtime (per `ldd tmux.exe`).
-# Windows searches the directory of the .exe first, so co-locating
-# the DLLs alongside tmux.exe makes the bundle portable — no PATH
-# manipulation, no MSYS2 install required.
-#
-# Search order: C:\msys64\usr\bin (MSYS runtime + libevent/ncurses
-# from MSYS repo) → C:\msys64\mingw64\bin (mingw64 fallback for
-# libevent/ncurses) → PATH.
-$msysRoots = @(
-    'C:\msys64\usr\bin',
-    'C:\msys64\mingw64\bin'
-)
+# 2. Bundle runtime DLLs alongside tmux.exe. Search order:
+#    C:\msys64\usr\bin   (MSYS runtime + MSYS libevent/ncurses)
+#    C:\msys64\mingw64\bin (mingw64 libevent/ncurses fallback)
+#    PATH (last resort)
+$msysRoots = @('C:\msys64\usr\bin', 'C:\msys64\mingw64\bin')
 $dllNames = @(
-    'msys-2.0.dll',                  # MSYS2 runtime (required for msys-gcc builds)
+    'msys-2.0.dll',
     'libevent-2-1-0.dll',
     'libevent_core-2-1-0.dll',
     'libevent_extra-2-1-0.dll',
@@ -69,31 +60,31 @@ foreach ($dll in $dllNames) {
             break
         }
     }
-    if (-not $found) {
-        $cmd = Get-Command $dll -ErrorAction SilentlyContinue
-        if ($cmd) { $found = $cmd.Source }
+    if ($null -eq $found) {
+        $cmd = Get-Command -Name $dll -ErrorAction SilentlyContinue
+        if ($null -ne $cmd) { $found = $cmd.Source }
     }
     if ($found) {
         Copy-Item $found (Join-Path $binDir $dll) -Force
         Write-Output "    bundle: $dll (from $found)"
     } else {
-        Write-Warning "WARN: $dll not found — tmux.exe may fail to start without it"
+        Write-Warning "WARN: $dll not found, tmux.exe may fail to start"
     }
 }
 
-# ─── 3. Man page + example config ──────────────────────────────────────
+# 3. Man page + example config
 $tmuxSrc = Join-Path $root 'upstream/tmux'
 New-Item -ItemType Directory -Path (Join-Path $outDir 'man/man1') -Force | Out-Null
 Copy-Item (Join-Path $tmuxSrc 'tmux.1')         (Join-Path $outDir 'man/man1/tmux.1')
 Copy-Item (Join-Path $tmuxSrc 'example_tmux.conf') (Join-Path $outDir 'example_tmux.conf')
 
-# ─── 4. LICENSE / NOTICE / README ──────────────────────────────────────
+# 4. LICENSE / NOTICE / README
 Copy-Item (Join-Path $root 'LICENSE')     (Join-Path $outDir 'LICENSE')
 Copy-Item (Join-Path $root 'NOTICE.md')   (Join-Path $outDir 'NOTICE.md')
 Copy-Item (Join-Path $root 'README.md')   (Join-Path $outDir 'README.md')
 Copy-Item (Join-Path $root 'README.cn.md') (Join-Path $outDir 'README.cn.md')
 
-# ─── 5. Zip it up ──────────────────────────────────────────────────────
+# 5. Zip it up
 $zipPath = Join-Path $root "dist/tmux-$target.zip"
 if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
 Add-Type -AssemblyName System.IO.Compression.FileSystem
