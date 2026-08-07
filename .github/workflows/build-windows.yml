@@ -1,0 +1,114 @@
+name: build-windows
+
+# Windows-only build. Detached from build-and-test.yml so iterating on
+# Windows shims doesn't repeatedly rebuild Linux + macOS (4 matrix
+# entries = ~10 min of CI minutes per push).
+#
+# Triggers:
+#   - push / PR: changes to scripts/build.sh, scripts/compat-windows.c,
+#                 scripts/build-windows-*.sh
+#   - push: changes to upstream/tmux/ (vendored source)
+#   - workflow_dispatch: manual
+#
+# Diff vs build-and-test.yml:
+#   - matrix.os/windows ONLY (filters out linux, macos)
+#   - reuses the same MSYS2 install + build.sh MSYS2 path
+#   - emits a single artifact (tmux-x86_64-windows.zip)
+#
+# v0.2.0 ships shared + DLL bundle (build-artifact = tmux.exe +
+# libevent-2-1-0.dll + libncursesw6.dll + libtinfo6.dll co-located in
+# bin/). Self-contained via Windows app-local DLL search. NOT
+# statically linked — see static-build ruleset for the platform
+# exception note.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/build.sh'
+      - 'scripts/compat-windows.c'
+      - 'scripts/build-windows*'
+      - 'upstream/tmux/**'
+      - '.github/workflows/build-windows.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/build.sh'
+      - 'scripts/compat-windows.c'
+      - 'scripts/build-windows*'
+      - 'upstream/tmux/**'
+      - '.github/workflows/build-windows.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: x86_64-windows, runner: windows-latest, os: windows }
+    env:
+      TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install deps (MSYS2 + mingw64 + libevent/ncurses)
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            git
+            base-devel
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-autotools
+            mingw-w64-x86_64-libevent
+            mingw-w64-x86_64-ncurses
+            mingw-w64-x86_64-pkg-config
+            mingw-w64-x86_64-gettext
+
+      - name: Build (Windows x86_64 — msys2 bash + mingw64)
+        shell: msys2 {0}
+        env:
+          TMUX_OS_HINT: msys
+        run: bash scripts/build.sh && bash scripts/smoke.sh
+
+      - name: Package (Windows)
+        shell: msys2 {0}
+        env:
+          TARGET: ${{ matrix.target }}
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/package.ps1
+
+      - name: Verify self-contained (Windows)
+        shell: pwsh
+        run: |
+          $exe = "dist/${{ matrix.target }}/bin/tmux.exe"
+          $exists = Test-Path $exe
+          if (-not $exists) { throw "missing: $exe (build failed)" }
+          $size = (Get-Item $exe).Length
+          Write-Host "tmux.exe size: $size bytes"
+          Get-ChildItem "dist/${{ matrix.target }}/bin/" | Format-Table Name, Length
+
+      - name: Show file type & size (Windows)
+        shell: pwsh
+        run: |
+          $exe = "dist/${{ matrix.target }}/bin/tmux.exe"
+          file $exe
+          Get-ChildItem "dist/${{ matrix.target }}.zip" | Format-Table Name, Length
+
+      - name: Upload test artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tmux-test-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: warn
+          retention-days: 7
