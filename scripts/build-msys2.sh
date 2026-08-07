@@ -36,8 +36,12 @@ command -v gcc >/dev/null 2>&1 \
 
 [ -f "$SRC/configure.ac" ] \
 	|| { echo "error: $SRC/configure.ac not found (vendoring incomplete?)" >&2; exit 1; }
-[ -x "$SRC/autogen.sh" ] \
-	|| { echo "error: $SRC/autogen.sh not found" >&2; exit 1; }
+# PKGBUILD runs ./autogen.sh because the upstream GitHub tarball
+# (https://github.com/tmux/tmux/archive/3.7b.tar.gz) does NOT ship
+# configure. Our vendored copy DOES ship configure (we vendored after
+# running autotools) but autogen.sh is not vendored. Use autoreconf -fi
+# which works in both cases — re-runs autotools on configure.ac.
+# Idempotent: no-op if configure is already up to date.
 
 JOBS="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)"
 
@@ -52,8 +56,11 @@ JOBS="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)"
 	-delete 2>/dev/null || true )
 
 # ---- PKGBUILD prepare() ----
-echo "==> autogen.sh"
-( cd "$SRC" && ./autogen.sh )
+# PKGBUILD runs ./autogen.sh (upstream GitHub tarball lacks configure).
+# Our vendored copy ships configure but not autogen.sh, so use
+# autoreconf -fi directly — equivalent to autogen.sh on this project.
+echo "==> autoreconf -fi (PKGBUILD's autogen.sh equivalent)"
+( cd "$SRC" && autoreconf -fi )
 
 # ---- PKGBUILD build()  (VERBATIM configure flags) ----
 echo "==> configure"
