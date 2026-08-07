@@ -83,6 +83,19 @@ cat > "$COMPAT_INC/sys/socket.h" <<'SHIM'
 #endif
 SHIM
 
+# Patch tmux.h: <sys/uio.h> and <termios.h> are POSIX-only; tmux
+# source never uses iovec/tcgetattr on Windows. Guard with
+# #if !defined(_WIN32) so the build skips these includes on
+# mingw-w64. (POSIX source patch is the smallest possible
+# divergence from upstream — only 2 #include lines get an
+# ifdef wrapper.)
+( cd "$SRC" && \
+	awk '
+		/^#include <sys\/uio\.h>$/ { print "#if !defined(_WIN32)"; print; print "#endif"; next }
+		/^#include <termios\.h>$/  { print "#if !defined(_WIN32)"; print; print "#endif"; next }
+		{ print }
+	' tmux.h > tmux.h.new && mv tmux.h.new tmux.h )
+
 ( cd "$SRC" && \
 	CPPFLAGS="${CPPFLAGS:-} -I$COMPAT_INC -I/usr/include/ncursesw -U_XOPEN_SOURCE" \
 		./configure \
