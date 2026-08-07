@@ -106,13 +106,15 @@ ls -la "$SRC/tmux.exe"
 file "$SRC/tmux.exe" 2>/dev/null || true
 
 echo "==> runtime DLL deps (package.ps1 will bundle these):"
-# Write full ldd output (paths + basenames) to a file package.ps1
-# reads, so it can find each DLL regardless of which MSYS2 dir it
-# lives in (libevent/ncurses DLLs may be in /usr/lib or /usr/bin
-# depending on repo + version).
+# ldd prints MSYS-style POSIX paths (/usr/bin/msys-2.0.dll,
+# /c/Windows/System32/KERNEL32.DLL). Convert to Windows-style
+# (C:\msys64\usr\bin\msys-2.0.dll, C:\Windows\System32\KERNEL32.DLL)
+# with cygpath -w so PowerShell's Test-Path can find them.
 DLL_DEPS_FILE="$ROOT/dist-dll-deps.txt"
 mkdir -p "$(dirname "$DLL_DEPS_FILE")"
 ldd "$SRC/tmux.exe" 2>/dev/null \
 	| awk '/=> *[^ ]+\.(dll|DLL)/ {print $3}' \
-	| sort -u > "$DLL_DEPS_FILE" || true
+	| sort -u \
+	| while read -r p; do cygpath -w "$p"; done \
+	> "$DLL_DEPS_FILE" || true
 cat "$DLL_DEPS_FILE"
