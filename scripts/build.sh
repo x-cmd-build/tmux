@@ -201,6 +201,22 @@ SHIM
 	cat > "$COMPAT_INC/sys/uio.h" <<'SHIM'
 /* shim: tmux source doesn't use iovec; provide an empty placeholder. */
 SHIM
+	# sys/ioctl.h: tmux's compat.h includes it. MSYS2's mingw-w64 fork
+	# doesn't have it. Shim with TIOCGWINSZ (compat.h uses it).
+	cat > "$COMPAT_INC/sys/ioctl.h" <<'SHIM'
+/* shim: mingw-w64 lacks sys/ioctl.h. Provide TIOCGWINSZ for tmux. */
+#ifndef _SYS_IOCTL_H_SHIM
+#define _SYS_IOCTL_H_SHIM
+struct winsize {
+    unsigned short ws_row;
+    unsigned short ws_col;
+    unsigned short ws_xpixel;
+    unsigned short ws_ypixel;
+};
+#define TIOCGWINSZ 0x5413
+#define TIOCSWINSZ 0x5414
+#endif
+SHIM
 	# termios.h: tmux.h includes it. MSYS2's mingw-w64 fork has it
 	# (via libmangle). Our build env doesn't see it (default include
 	# path mismatch). Provide a minimal POSIX termios.h shim that
