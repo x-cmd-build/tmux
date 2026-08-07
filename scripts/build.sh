@@ -411,38 +411,23 @@ static inline pid_t wait(int *status) {
 }
 #endif
 SHIM
-	# unistd.h: mingw-w64 provides a partial one. tmux uses getuid /
-	# getgid / geteuid / getgid, none of which exist on Windows.
-	# Provide stub implementations that return 0 + flag tmux's
-	# security checks as "allow". tmux-on-Windows-git-bash runs as
-	# the current user; uid resolution is delegated to git-bash /
-	# win32 APIs (todo: use GetCurrentProcessToken).
+	# unistd.h: mingw-w64 provides most of unistd.h (getpid, getppid,
+	# read, write, close, etc.). We only need to add the POSIX UID
+	# family (getuid, geteuid, getgid, getegid) which mingw-w64
+	# omits. Use the host's unistd.h (via #include_next) and then
+	# inject the missing declarations.
 	cat > "$COMPAT_INC/unistd.h" <<'SHIM'
-/* shim: mingw-w64's unistd.h lacks getuid/getgid family.
- * Stub them to return 0 (root) for now. tmux's uid checks then
- * permit operations that would otherwise be rejected. */
+/* shim: mingw-w64's unistd.h lacks getuid/geteuid/getgid/getegid.
+ * Pull in the host's unistd.h first, then add the missing POSIX
+ * UID family. Stub bodies return 0 (root) — tmux's security checks
+ * then permit operations that would otherwise be rejected. */
 #ifndef _UNISTD_H_SHIM
 #define _UNISTD_H_SHIM
-#include <process.h>
+#include_next <unistd.h>
 static inline unsigned short getuid(void)  { return 0; }
 static inline unsigned short geteuid(void) { return 0; }
 static inline unsigned short getgid(void)  { return 0; }
 static inline unsigned short getegid(void) { return 0; }
-static inline int getpid(void) { return _getpid(); }
-static inline int getppid(void) { return 0; }
-static inline unsigned int sleep(unsigned int s) {
-    Sleep(s * 1000);
-    return 0;
-}
-static inline int isatty(int fd) { return _isatty(fd); }
-static inline int fsync(int fd) { return _commit(fd); }
-static inline int close(int fd) { return _close(fd); }
-static inline int read(int fd, void *buf, unsigned int n) {
-    return _read(fd, buf, n);
-}
-static inline int write(int fd, const void *buf, unsigned int n) {
-    return _write(fd, buf, n);
-}
 #endif
 SHIM
 	# sys/ioctl.h: compat.h uses it for TIOCGWINSZ. Provide a stub.
