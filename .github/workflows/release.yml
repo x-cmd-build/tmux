@@ -67,21 +67,27 @@ jobs:
           arch -x86_64 /usr/local/bin/brew install bash autoconf automake libtool pkg-config
           arch -x86_64 /usr/local/bin/brew install libevent ncurses
 
-      - name: Install deps (Windows MSYS2 + mingw64 + libevent/ncurses)
+      # Windows x86_64: MSYS2 + msys gcc (option A from issue #1).
+      # v0.2.0 pivot: build in MSYS shell, not MINGW64. tmux 3.7b
+      # is deeply POSIX-dependent; msys gcc provides the full
+      # POSIX header set, mingw-w64 doesn't.
+      - name: Install deps (Windows MSYS2 + msys gcc + ncurses/libevent)
         if: matrix.os == 'windows'
         uses: msys2/setup-msys2@v2
         with:
-          msystem: MINGW64
+          msystem: MSYS
           update: true
           install: >-
             git
             base-devel
-            mingw-w64-x86_64-toolchain
-            mingw-w64-x86_64-autotools
-            mingw-w64-x86_64-libevent
-            mingw-w64-x86_64-ncurses
-            mingw-w64-x86_64-pkg-config
-            mingw-w64-x86_64-gettext
+            gcc
+            autoconf
+            automake
+            libtool
+            pkg-config
+            make
+            ncurses-devel
+            libevent-devel
 
       # ---- build + smoke ----
       - name: Build + smoke on Alpine (musl)
@@ -101,12 +107,10 @@ jobs:
           NCURSES_PREFIX:  /usr/local/opt/ncurses
         run: bash scripts/build.sh && bash scripts/smoke.sh
 
-      - name: Build (Windows x86_64 — msys2 bash + mingw64)
+      - name: Build (Windows x86_64 — MSYS shell + msys gcc, PKGBUILD verbatim)
         if: matrix.os == 'windows'
         shell: msys2 {0}
-        env:
-          TMUX_OS_HINT: msys
-        run: bash scripts/build.sh && bash scripts/smoke.sh
+        run: bash scripts/build-msys2.sh && bash scripts/smoke-msys2.sh upstream/tmux/tmux.exe
 
       # ---- package ----
       - name: Package (Linux / macOS)

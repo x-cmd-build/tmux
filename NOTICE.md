@@ -51,29 +51,28 @@ tmux links against two runtime libraries at build time:
 Both libraries are linked statically into the tmux binary on Linux and
 macOS (`-Wl,-force_load` + `.a` archive on macOS).
 
-## Windows support (DEFERRED — not in v0.1.0)
+## Windows support (shipped in v0.2.0)
 
-tmux 3.7 does **not officially support Windows**. The
-`configure.ac`'s CMSG_DATA check (looking for `CMSG_DATA` in
-`<sys/socket.h>`) fails on MinGW because Windows uses the Winsock
-`WSA_CMSG_DATA` macro family instead.
+v0.2.0 ships a Windows build via **MSYS2 + msys gcc** (option A from
+[issue #1](https://github.com/x-cmd-build/tmux/issues/1)). Same
+approach MSYS2's official tmux package uses. The output `tmux.exe`
+links against `msys-2.0.dll` (the MSYS2 runtime), which is bundled
+alongside `tmux.exe` in the release zip.
 
-The MSYS2 community port of tmux ships local patches that work around
-this, but those patches are not yet upstream in tmux 3.7. As a
-result, **v0.1.0 of `x-cmd-build/tmux` does not ship a Windows
-build**.
+**Runtime requirements for end users**: nothing extra. Extract the
+zip, `cd bin`, run `./tmux.exe` from cmd.exe / Windows Terminal.
+The bundled `msys-2.0.dll` + `msys-event_core-2-1-7.dll` +
+`msys-ncursesw6.dll` provide all dependencies.
 
-A future release (v0.2.0) will either:
+**Why not native mingw-w64**: tmux 3.7b is deeply POSIX-dependent
+(`<sys/queue.h>`, `<sys/tree.h>`, `<sys/wait.h>`, `<termios.h>`,
+`<fnmatch.h>`, etc.). mingw-w64 ships only a small subset of POSIX
+headers; a true native build needs ~200+ lines of patch. MSYS's
+libc provides the full set, the same way MSYS2's tmux package
+already does. See issue #1 for the full architectural discussion.
 
-1. Wait for upstream tmux to merge Windows portability fixes
-   (track <https://github.com/tmux/tmux/issues>), or
-2. Carry a local patch under `patches/` that adds the necessary
-   feature-test macros (`_WIN32_WINNT=0x0601`, `CMSG_DATA` macro
-   shim) — see mneme#N for the patch design.
-
-In the meantime, Windows users should run tmux under WSL (`wsl
---install` then `x eget x-cmd-build/tmux` inside WSL). The
-Linux/musl-static binary runs unchanged inside WSL.
+**v0.1.0 limitation**: v0.1.0 did not ship a Windows build; users on
+Windows had to run tmux under WSL. v0.2.0 fixes this.
 
 ## Why this notice exists
 

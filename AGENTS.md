@@ -7,15 +7,20 @@
 
 ## TL;DR for AI agents
 
-- **What**: portable tmux 3.7 (latest stable as of 2026-08-06), 4-platform
+- **What**: portable tmux 3.7b (latest stable as of 2026-08-06), 5-platform
   CI build. Resolves x-cmd/x-cmd#397 (tmux version was pinned to `0.1`
   while x eget actually pulled tmux 3.2a — version numbers misaligned
-  with upstream). Windows deferred to v0.2.0 — tmux 3.7 doesn't
-  officially support Windows (CMSG_DATA check fails on MinGW).
+  with upstream).
+- **Windows**: v0.2.0 ships tmux.exe built via MSYS2 + msys gcc. Links
+  `msys-2.0.dll` (bundled). See [issue #1](https://github.com/x-cmd-build/tmux/issues/1)
+  for the architectural discussion (option A: MSYS shell, not
+  native mingw-w64).
 - **Source**: vendored under `upstream/tmux/` via `git archive` from
   <https://github.com/tmux/tmux/releases/tag/3.7>.
-- **Build**: GitHub Actions only (`build-and-test.yml` + `release.yml`).
-  **No local builds** (per `feedback-ci-only-no-local-dev`).
+- **Build**: GitHub Actions only (`build-and-test.yml` + `release.yml` +
+  `build-windows.yml`). **No local builds** (per `feedback-ci-only-no-local-dev`).
+- **All CI is dispatch-only** (no push / pull_request triggers). Use
+  `gh workflow run <wf>` to invoke.
 - **Do NOT modify**: anything under `upstream/tmux/`.
 - **All build flags**: see `build-review.md` §2 (once published).
 
