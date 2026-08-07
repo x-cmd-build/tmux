@@ -201,6 +201,90 @@ SHIM
 	cat > "$COMPAT_INC/sys/uio.h" <<'SHIM'
 /* shim: tmux source doesn't use iovec; provide an empty placeholder. */
 SHIM
+	# termios.h: tmux.h includes it. MSYS2's mingw-w64 fork has it
+	# (via libmangle). Our build env doesn't see it (default include
+	# path mismatch). Provide a minimal POSIX termios.h shim that
+	# defines the struct + tcgetattr/tcsetattr/cfmakeraw macros tmux
+	# uses. The actual functions resolve to mingw-w64's stdlib.
+	cat > "$COMPAT_INC/termios.h" <<'SHIM'
+/* termios.h shim for mingw-w64. tmux 3.7b uses only:
+ *   tcgetattr, tcsetattr, cfmakeraw, struct termios, c_cflag, etc.
+ * MSYS2's libmangle provides a real termios.h via its full
+ * mingw-w64 fork; we shim just enough for the build to succeed. */
+#ifndef _TERMIOS_H_SHIM
+#define _TERMIOS_H_SHIM
+struct termios {
+    unsigned long c_iflag;
+    unsigned long c_oflag;
+    unsigned long c_cflag;
+    unsigned long c_lflag;
+    unsigned char c_line;
+    unsigned char c_cc[32];
+    unsigned long c_ispeed;
+    unsigned long c_ospeed;
+};
+#define TCGETS    0x5401
+#define TCSETS    0x5402
+#define TCSETSW   0x5403
+#define TCSETSF   0x5404
+#define TCIFLUSH  0x540B
+#define TCOFLUSH  0x540C
+#define TCIOFLUSH 0x540D
+#define TCOOFF    0x540E
+#define TCOON     0x540F
+#define TCSBRKP   0x5425
+#define TCXONC    0x540F
+#define TCSBRK    0x5425
+#define TCSAFLUSH 0x5410
+#define TCSANOW   0
+#define TCSADRAIN 1
+#define TCIFLUSH  0
+#define TCOFLUSH  1
+#define TCIOFLUSH 2
+#define TCOOFF    0
+#define TCOON     1
+#define IGNBRK    0x001
+#define BRKINT    0x002
+#define IGNPAR    0x004
+#define PARMRK    0x010
+#define INPCK     0x020
+#define ISTRIP    0x040
+#define INLCR     0x100
+#define IGNCR     0x200
+#define ICRNL     0x400
+#define IXON      0x1000
+#define IXOFF     0x2000
+#define IXANY     0x4000
+#define OPOST     0x001
+#define ONLCR     0x002
+#define OCRNL     0x004
+#define ONOCR     0x010
+#define ONLRET    0x020
+#define OFDEL     0x040
+#define ECHO      0x001
+#define ECHOE     0x002
+#define ECHOK     0x004
+#define ECHONL    0x010
+#define ICANON    0x100
+#define ISIG      0x001
+#define IEXTEN    0x080
+#define BRKINT    0x002
+#define NOFLSH    0x080
+#define TOSTOP    0x100
+#define CSIZE     0x030
+#define CS8       0x030
+#define CSTOPB    0x040
+#define CREAD     0x080
+#define PARENB    0x100
+#define PARODD    0x200
+#define HUPCL     0x400
+#define CLOCAL    0x800
+#define VMIN      0x004
+#define VTIME     0x008
+#define ISIG      0x001
+#define NCCS      32
+#endif
+SHIM
 	export CC="${CC:-gcc}"
 	: "${CFLAGS:=-O2 -D_FORTIFY_SOURCE=2}"
 	: "${LDFLAGS:=-lws2_32}"
