@@ -178,17 +178,32 @@ darwin)
 msys)
 	# Windows MSYS2 (mingw64). tmux 3.7b builds cleanly with
 	# CPPFLAGS=-U_XOPEN_SOURCE -I/usr/include/ncursesw (the MSYS2
-	# PKGBUILD recipe; no patches). Dynamic link against MSYS2's
+	# PKGBUILD recipe; no source patches). Dynamic link against MSYS2's
 	# libevent + ncurses DLLs — package.ps1 copies them alongside
 	# tmux.exe (Windows app-local DLL search).
+	#
+	# MSYS2's mingw-w64 fork has CMSG_DATA in sys/socket.h; upstream
+	# mingw-w64 doesn't. Provide a single shim so configure's
+	# AC_EGREP_CPP for CMSG_DATA passes. Single shim, no source
+	# patches on tmux.
+	COMPAT_INC="$BUILD_DIR/compat-inc"
+	mkdir -p "$COMPAT_INC/sys"
+	cat > "$COMPAT_INC/sys/socket.h" <<'SHIM'
+/* shim: CMSG_DATA only. MSYS2's mingw-w64 fork provides Winsock2 +
+ * CMSG_DATA in sys/socket.h; upstream mingw-w64 doesn't. */
+#ifndef _SYS_SOCKET_H_MIN_SHIM
+#define _SYS_SOCKET_H_MIN_SHIM
+#define CMSG_DATA(cmsg) ((unsigned char *)(((struct cmsghdr *)(cmsg)) + 1))
+#endif
+SHIM
 	export CC="${CC:-gcc}"
 	: "${CFLAGS:=-O2 -D_FORTIFY_SOURCE=2}"
 	: "${LDFLAGS:=-lws2_32}"
 	export CFLAGS LDFLAGS
-	# CRITICAL: -U_XOPEN_SOURCE bypasses tmux's broken CMSG_DATA
-	# detection (which probes <sys/socket.h> for CMSG_DATA, missing
-	# from MinGW headers). ncursesw is MSYS2's wide-char ncurses.
-	: "${CPPFLAGS:=$TMUX_MSYS_CPPFLAGS}"
+	# -I compat-inc FIRST so the shim is picked up by configure's
+	# AC_EGREP_CPP; -I/usr/include/ncursesw for ncursesw headers;
+	# -U_XOPEN_SOURCE bypasses tmux's broken CMSG_DATA fallback.
+	: "${CPPFLAGS:=-I$COMPAT_INC -U_XOPEN_SOURCE -I/usr/include/ncursesw}"
 	export CPPFLAGS
 	CONFIGURE_ARGS="$CONFIGURE_BASE $TMUX_MSYS_CONFIGURE_ARGS --disable-utf8proc --disable-systemd --enable-shared --disable-static"
 	if [ -z "$TRIPLET" ]; then
