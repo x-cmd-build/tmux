@@ -25,18 +25,14 @@ esac
 command -v gcc >/dev/null 2>&1 \
 	|| { echo "error: gcc not on PATH (is this a mingw64 shell?)" >&2; exit 1; }
 
-# PKGBUILD's makedepends ('ncurses-devel' 'libevent-devel' 'autotools')
-# refer to the MSYS repo package names. We're in the MINGW64 shell, so
-# the actual installed packages are:
-#   ncurses-devel       → mingw-w64-x86_64-ncurses-devel
-#   libevent-devel      → mingw-w64-x86_64-libevent-devel
-#   autotools           → mingw-w64-x86_64-autotools (and msys autoconf/automake)
-# The CI workflow installs the runtime variants; the *-devel subpackages
-# are what provide headers + link libs.
-for pkg in mingw-w64-x86_64-ncurses-devel mingw-w64-x86_64-libevent-devel mingw-w64-x86_64-autotools; do
-	pacman -Qq "$pkg" >/dev/null 2>&1 \
-		|| { echo "error: missing makedepend '$pkg' — run: pacman -S $pkg" >&2; exit 1; }
-done
+# Note: PKGBUILD's makedepends ('ncurses-devel' 'libevent-devel'
+# 'autotools') are MSYS-repo package names (used when building in the
+# MSYS shell, not MINGW64). The CI workflow runs in MINGW64, where
+# headers + link libs come from the same package as runtime DLLs —
+# mingw-w64-x86_64-ncurses, mingw-w64-x86_64-libevent, and
+# mingw-w64-x86_64-libmangle (POSIX shim headers) are all installed
+# by build-windows.yml. We don't re-verify here because pacman checks
+# would need MINGW64-vs-MSYS-aware package name mapping.
 
 [ -f "$SRC/configure.ac" ] \
 	|| { echo "error: $SRC/configure.ac not found (vendoring incomplete?)" >&2; exit 1; }
