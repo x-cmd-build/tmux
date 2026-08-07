@@ -217,6 +217,21 @@ struct winsize {
 #define TIOCSWINSZ 0x5414
 #endif
 SHIM
+	# fnmatch.h: tmux's compat.h includes it. MSYS2's mingw-w64 fork
+	# doesn't have it. Use libgnurx or shim.
+	cat > "$COMPAT_INC/fnmatch.h" <<'SHIM'
+/* shim: mingw-w64 lacks fnmatch.h. tmux compat.h declares it,
+ * scripts/compat-windows.c implements it. Match FNM_* values. */
+#ifndef _FNMATCH_H_SHIM
+#define _FNMATCH_H_SHIM
+#define FNM_NOMATCH  1
+#define FNM_PATHNAME 0x01
+#define FNM_NOESCAPE 0x02
+#define FNM_PERIOD   0x04
+#define FNM_CASEFOLD 0x08
+extern int fnmatch(const char *, const char *, int);
+#endif
+SHIM
 	# termios.h: tmux.h includes it. MSYS2's mingw-w64 fork has it
 	# (via libmangle). Our build env doesn't see it (default include
 	# path mismatch). Provide a minimal POSIX termios.h shim that
