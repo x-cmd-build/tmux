@@ -64,8 +64,27 @@ echo "==> autoreconf -fi (PKGBUILD's autogen.sh equivalent)"
 
 # ---- PKGBUILD build()  (VERBATIM configure flags) ----
 echo "==> configure"
+# CMSG_DATA: the PKGBUILD in MSYS shell relies on -U_XOPEN_SOURCE making
+# msys winsock2.h expose CMSG_DATA. We run in MINGW64; mingw-w64's
+# winsock2.h only defines WSA_CMSG_DATA, never CMSG_DATA. configure.ac
+# line 605-617 AC_EGREP_CPP checks #ifdef CMSG_DATA — we must satisfy
+# the probe with a tiny header shim.
+COMPAT_INC="$ROOT/build-msys2-include"
+mkdir -p "$COMPAT_INC/sys"
+cat > "$COMPAT_INC/sys/socket.h" <<'SHIM'
+/* mingw-w64's winsock2.h doesn't expose CMSG_DATA (it uses
+ * WSA_CMSG_DATA). tmux's configure.ac (line 605-617) probes
+ * AC_EGREP_CPP for #ifdef CMSG_DATA. Define it here so the probe
+ * passes. tmux's source never actually calls CMSG_DATA on Windows
+ * paths, so the value is only consumed by configure's check. */
+#ifndef _COMPAT_SYS_SOCKET_H
+#define _COMPAT_SYS_SOCKET_H
+#define CMSG_DATA(cmsg) ((unsigned char *)(((struct cmsghdr *)(cmsg)) + 1))
+#endif
+SHIM
+
 ( cd "$SRC" && \
-	CPPFLAGS="${CPPFLAGS:-} -I/usr/include/ncursesw -U_XOPEN_SOURCE" \
+	CPPFLAGS="${CPPFLAGS:-} -I$COMPAT_INC -I/usr/include/ncursesw -U_XOPEN_SOURCE" \
 		./configure \
 			--build="${CHOST:-x86_64-w64-mingw32}" \
 			--enable-sixel \
