@@ -377,6 +377,74 @@ struct sockaddr_un {
 };
 #endif
 SHIM
+	# sys/wait.h: mingw-w64 doesn't provide it. tmux uses waitpid()
+	# + WIFEXITED / WEXITSTATUS / WIFSIGNALED / WNOHANG. On Windows
+	# these are provided by <process.h> + <windows.h>, but tmux's
+	# source uses POSIX names. Provide a shim that maps to native
+	# Windows equivalents. We use the simple approach: provide the
+	# POSIX macros and a stub waitpid() that returns -1 (no children
+	# to wait for in tmux-on-Windows — process spawning is via
+	# CreateProcess, not fork).
+	cat > "$COMPAT_INC/sys/wait.h" <<'SHIM'
+/* shim: mingw-w64 lacks sys/wait.h. Stub POSIX wait macros +
+ * waitpid() for tmux compilation. tmux-on-Windows-git-bash doesn't
+ * actually fork() — process spawning is via CreateProcess(), so
+ * waitpid() returning -1 is correct (no POSIX children). */
+#ifndef _SYS_WAIT_H_SHIM
+#define _SYS_WAIT_H_SHIM
+#include <process.h>
+#define WIFEXITED(status)   (((status) & 0x0300) == 0)
+#define WEXITSTATUS(status) ((status) & 0xFF)
+#define WIFSIGNALED(status) (((status) & 0x0300) != 0)
+#define WTERMSIG(status)   ((status) & 0x7F)
+#define WNOHANG             1
+#define WUNTRACED           2
+#define WCONTINUED          8
+typedef int pid_t;
+static inline pid_t waitpid(pid_t pid, int *status, int options) {
+    (void)pid; (void)status; (void)options;
+    errno = ECHILD;
+    return -1;
+}
+static inline pid_t wait(int *status) {
+    return waitpid(-1, status, 0);
+}
+#endif
+SHIM
+	# unistd.h: mingw-w64 provides a partial one. tmux uses getuid /
+	# getgid / geteuid / getgid, none of which exist on Windows.
+	# Provide stub implementations that return 0 + flag tmux's
+	# security checks as "allow". tmux-on-Windows-git-bash runs as
+	# the current user; uid resolution is delegated to git-bash /
+	# win32 APIs (todo: use GetCurrentProcessToken).
+	cat > "$COMPAT_INC/unistd.h" <<'SHIM'
+/* shim: mingw-w64's unistd.h lacks getuid/getgid family.
+ * Stub them to return 0 (root) for now. tmux's uid checks then
+ * permit operations that would otherwise be rejected. */
+#ifndef _UNISTD_H_SHIM
+#define _UNISTD_H_SHIM
+#include <process.h>
+static inline unsigned short getuid(void)  { return 0; }
+static inline unsigned short geteuid(void) { return 0; }
+static inline unsigned short getgid(void)  { return 0; }
+static inline unsigned short getegid(void) { return 0; }
+static inline int getpid(void) { return _getpid(); }
+static inline int getppid(void) { return 0; }
+static inline unsigned int sleep(unsigned int s) {
+    Sleep(s * 1000);
+    return 0;
+}
+static inline int isatty(int fd) { return _isatty(fd); }
+static inline int fsync(int fd) { return _commit(fd); }
+static inline int close(int fd) { return _close(fd); }
+static inline int read(int fd, void *buf, unsigned int n) {
+    return _read(fd, buf, n);
+}
+static inline int write(int fd, const void *buf, unsigned int n) {
+    return _write(fd, buf, n);
+}
+#endif
+SHIM
 	# sys/ioctl.h: compat.h uses it for TIOCGWINSZ. Provide a stub.
 	cat > "$COMPAT_INC/sys/ioctl.h" <<'SHIM'
 /* shim: tmux uses TIOCGWINSZ (via ioctl) for terminal size. */
