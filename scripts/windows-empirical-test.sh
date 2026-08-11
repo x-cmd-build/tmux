@@ -84,19 +84,52 @@ run_scenario "S1-sanity" \
 # === S2: Basic new-session with TMPDIR set (mimics what tmux.cmd does) ===
 TMPDIR="$USERPROFILE/AppData/Local/Temp" \
 run_scenario "S2-new-session-TMPDIR-set" \
-    "'$TMUX_ROOT/bin/tmux.exe' -L s2 new-session -d && '$TMUX_ROOT/bin/tmux.exe' -L s2 list-sessions && '$TMUX_ROOT/bin/tmux.exe' -L s2 kill-server"
+    "echo 'ENV: TMPDIR='\"\${TMPDIR:-unset}\"' HOME='\"\${HOME:-unset}\"' USERPROFILE='\"\${USERPROFILE:-unset}\"'; '$TMUX_ROOT/bin/tmux.exe' -L s2 new-session -d && '$TMUX_ROOT/bin/tmux.exe' -L s2 list-sessions && '$TMUX_ROOT/bin/tmux.exe' -L s2 kill-server"
 
 # === S3: tmux.cmd wrapper (current v0.2.1 design) ===
 run_scenario "S3-tmux-cmd-wrapper" \
     "'$TMUX_ROOT/tmux.cmd' -L s3 new-session -d && '$TMUX_ROOT/bin/tmux.exe' -L s3 list-sessions && '$TMUX_ROOT/bin/tmux.exe' -L s3 kill-server"
 
-# === S4: -S with Windows-style absolute path ===
+# === S3b: tmux.cmd wrapper with HOME set (hypothesis: wrapper needs to set HOME for /c mount) ===
+HOME="$USERPROFILE" run_scenario "S3b-tmux-cmd-wrapper-HOME-set" \
+    "'$TMUX_ROOT/tmux.cmd' -L s3b new-session -d && '$TMUX_ROOT/bin/tmux.exe' -L s3b list-sessions && '$TMUX_ROOT/bin/tmux.exe' -L s3b kill-server"
+
+# === S4: -S with Windows-style absolute path (mixed separators) ===
 SOCK_S4="$USERPROFILE/.tmux-s4-test/default"
 rm -rf "$USERPROFILE/.tmux-s4-test" 2>/dev/null
-mkdir -p "$(USERPROFILE)/.tmux-s4-test" 2>/dev/null
+mkdir -p "$USERPROFILE/.tmux-s4-test" 2>/dev/null
 run_scenario "S4-S-Windows-path" \
     "'$TMUX_ROOT/bin/tmux.exe' -S '$SOCK_S4' new-session -d && '$TMUX_ROOT/bin/tmux.exe' -S '$SOCK_S4' list-sessions && '$TMUX_ROOT/bin/tmux.exe' -S '$SOCK_S4' kill-server" \
     "rm -rf '$USERPROFILE/.tmux-s4-test'"
+
+# === S4b: -S with pure Windows path (all backslashes, no POSIX mixed) ===
+SOCK_S4b_WIN="C:\\Users\\runneradmin\\.tmux-s4b-test\\default"
+SOCK_S4b_POSIX="/c/Users/runneradmin/.tmux-s4b-test/default"
+rm -rf "$USERPROFILE/.tmux-s4b-test" 2>/dev/null
+mkdir -p "$USERPROFILE/.tmux-s4b-test" 2>/dev/null
+run_scenario "S4b-S-Windows-backslashes" \
+    "'$TMUX_ROOT/bin/tmux.exe' -S 'C:\\Users\\runneradmin\\.tmux-s4b-test\\default' new-session -d && '$TMUX_ROOT/bin/tmux.exe' -S 'C:\\Users\\runneradmin\\.tmux-s4b-test\\default' list-sessions && '$TMUX_ROOT/bin/tmux.exe' -S 'C:\\Users\\runneradmin\\.tmux-s4b-test\\default' kill-server" \
+    "rm -rf '$USERPROFILE/.tmux-s4b-test'"
+
+# === S4c: -S with POSIX /c path (the format S5 used and passed) ===
+run_scenario "S4c-S-POSIX-c-path" \
+    "'$TMUX_ROOT/bin/tmux.exe' -S '$SOCK_S4b_POSIX' new-session -d && '$TMUX_ROOT/bin/tmux.exe' -S '$SOCK_S4b_POSIX' list-sessions && '$TMUX_ROOT/bin/tmux.exe' -S '$SOCK_S4b_POSIX' kill-server" \
+    "rm -rf '$USERPROFILE/.tmux-s4b-test'"
+
+# === S9: Option B + wrapper (hypothesis: wrapper that injects Git Bash PATH + tmux.cmd contents) ===
+if [ -n "$GIT_BIN_WIN" ] && [ -f "$GIT_BIN_WIN/msys-2.0.dll" ]; then
+    PATH_WITH_GIT="$GIT_BIN_WIN:$TMUX_ROOT/bin:$PATH"
+    rm -rf "$TMUX_ROOT/bin/msys-2.0.dll" 2>/dev/null
+    # Enhanced wrapper that uses Git Bash DLL via PATH injection
+    run_scenario "S9-no-bundle-wrapper-enhanced" \
+        "PATH='$PATH_WITH_GIT' '$TMUX_ROOT/bin/tmux.exe' -L s9 new-session -d && PATH='$PATH_WITH_GIT' '$TMUX_ROOT/bin/tmux.exe' -L s9 list-sessions && PATH='$PATH_WITH_GIT' '$TMUX_ROOT/bin/tmux.exe' -L s9 kill-server"
+    # Restore bundle
+    if [ -f "$TMUX_ROOT/bin/msys-2.0.dll.bak" ]; then
+        mv "$TMUX_ROOT/bin/msys-2.0.dll.bak" "$TMUX_ROOT/bin/msys-2.0.dll"
+    fi
+else
+    record "S9-no-bundle-wrapper-enhanced" "SKIP" "GIT_BIN not detected"
+fi
 
 # === S5: -S with HOME-derived POSIX path (expected to FAIL with bundled DLL) ===
 SOCK_S5="$HOME/.tmux-s5-test/default"
