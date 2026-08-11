@@ -109,14 +109,14 @@ jobs:
           # a literal 'bin\' subdir. We also have an empty 'bin/' from
           # the zip's directory entry. Merge: rename 'bin\' to 'bin_x',
           # move its contents into 'bin/', then drop bin_x.
-          $backDir = Join-Path $dst 'bin_'
           $backDirX = Join-Path $dst 'bin_x'
-          $oldBin = Join-Path $dst 'bin\'
+          $oldBin = Join-Path $dst ('bin' + [char]92)
+          $newBin = Join-Path $dst ('bin' + [char]92)
           if (Test-Path $oldBin) {
               Rename-Item $oldBin $backDirX -Force
               if (Test-Path $backDirX) {
                   Get-ChildItem -Path $backDirX -Force | ForEach-Object {
-                      Move-Item -Path $_.FullName -Destination (Join-Path $dst 'bin\') -Force
+                      Move-Item -Path $_.FullName -Destination $newBin -Force
                   }
               }
               Remove-Item -Recurse -Force $backDirX
