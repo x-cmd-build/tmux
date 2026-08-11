@@ -35,8 +35,24 @@ tmux 3.7b has **two distinct failure paths** that both look like
 - `-S <path>` (bypasses both paths)
 - Set `TMPDIR` to a real existing directory
 - Run inside Git Bash / MSYS2 shell
-- v0.2.1 direction: combine `-DTMUX_SOCK_PERM=0` (build flag) +
-  `tmux.c:make_label` env-var fallback patch
+
+### v0.2.1 fix: build flag only (locked 2026-08-11)
+
+v0.2.1 ships **one** change: `-DTMUX_SOCK_PERM=0` added to the configure step
+in `scripts/build-msys2.sh`. No source patch, no wrapper, no behavioral
+change for Linux/macOS.
+
+This permanently disables **Path 2** (the chmod/noacl failure mode for
+Git Bash users). Path 1 stays as a documented user-side workaround —
+acceptable trade-off because:
+
+- Path 1 only affects bare cmd.exe users without TMPDIR — small population
+- Three documented workarounds already exist (issue #5)
+- Source patch to `tmux.c:make_label` would touch vendored source shared
+  with Linux/macOS builds (needs `#ifdef _WIN32` guard); minimal benefit
+  doesn't justify vendoring divergence
+- `tmux.cmd` wrapper adds a Windows-only artifact to the zip; not worth
+  the maintenance cost for a narrow failure mode
 
 ---
 
