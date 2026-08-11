@@ -75,3 +75,69 @@ jobs:
       - name: Run empirical test scenarios
         shell: bash
         run: bash scripts/windows-empirical-test.sh
+
+      # === S11: v0.2.2 candidate wrapper from PowerShell context ===
+      # This is the real-world test: user invokes wrapper via cmd.exe or
+      # PowerShell (not bash). The wrapper must self-bootstrap by finding
+      # Git Bash via registry, not relying on bash's pre-set PATH.
+      - name: S11 - candidate wrapper from PowerShell
+        shell: pwsh
+        run: |
+          $tmuxRoot = (Resolve-Path "tmux").Path
+          $candidateWrapper = Join-Path $tmuxRoot "scripts\tmux-v022-candidate.cmd"
+
+          # Remove bundled DLL so Win32 DLL search uses Git Bash's via PATH
+          $dllBak = "$tmuxRoot\bin\msys-2.0.dll.bak"
+          $dllOrig = "$tmuxRoot\bin\msys-2.0.dll"
+          if (Test-Path $dllOrig) {
+            Move-Item -Path $dllOrig -Destination $dllBak -Force
+          }
+
+          "## S11: candidate wrapper from PowerShell" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+
+          try {
+            # Test 1: -L label
+            & "$candidateWrapper" -L s11 new-session -d 2>&1 | Out-Null
+            "exit (new-session -L s11): $LASTEXITCODE" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+            if ($LASTEXITCODE -eq 0) {
+              & "$candidateWrapper" -L s11 list-sessions 2>&1 | Out-File -Append $env:GITHUB_STEP_SUMMARY
+              & "$candidateWrapper" -L s11 kill-server 2>&1 | Out-Null
+              "## S11 PASS" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+            } else {
+              "## S11 FAIL: new-session exited $LASTEXITCODE" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+            }
+          } catch {
+            "## S11 EXCEPTION: $_" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+          }
+
+          # Test 2: -S $HOME-style POSIX path
+          $sockDir = "$env:USERPROFILE\.tmux-s11-test"
+          $sock = "$sockDir\default"
+          if (-not (Test-Path $sockDir)) { New-Item -ItemType Directory -Path $sockDir -Force | Out-Null }
+
+          "## S11b: candidate wrapper -S POSIX path" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+          try {
+            # Convert $env:USERPROFILE to POSIX /c/... style
+            $posixHome = "/c/" + ($env:USERPROFILE -replace '^C:\\', '') -replace '\\', '/'
+            $posixSock = $posixHome + "/.tmux-s11-test/default"
+            & "$candidateWrapper" -S "$posixSock" new-session -d 2>&1 | Out-Null
+            "exit (new-session -S POSIX): $LASTEXITCODE" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+            if ($LASTEXITCODE -eq 0) {
+              & "$candidateWrapper" -S "$posixSock" list-sessions 2>&1 | Out-File -Append $env:GITHUB_STEP_SUMMARY
+              & "$candidateWrapper" -S "$posixSock" kill-server 2>&1 | Out-Null
+              "## S11b PASS" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+            } else {
+              "## S11b FAIL: new-session exited $LASTEXITCODE" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+            }
+          } catch {
+            "## S11b EXCEPTION: $_" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+          }
+
+          Remove-Item -Recurse -Force $sockDir -ErrorAction SilentlyContinue
+
+          # Restore bundled DLL
+          if (Test-Path $dllBak) {
+            Move-Item -Path $dllBak -Destination $dllOrig -Force
+          }
+
+          Get-Process tmux -ErrorAction SilentlyContinue | Stop-Process -Force
