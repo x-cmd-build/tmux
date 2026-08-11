@@ -130,27 +130,28 @@ jobs:
             # — we normalize both to that layout here.
             # The zip has no top-level dir prefix and uses 'bin\'
             # (backslash) as a subdir name (PowerShell Compress-Archive
-            # default). Use 'unzip -j' to junk paths and dispatch
-            # each entry to its target dir explicitly. This avoids
-            # the backslash-dir-name rabbit hole entirely.
+            # default). Use 'unzip -j' (junk paths) so 'bin	mux.exe'
+            # extracts as just 'tmux.exe' into a target dir we choose.
             mkdir -p "tmux-${{ matrix.target }}/bin" "tmux-${{ matrix.target }}/man/man1"
-            # Read the zip entry list. unzip -Z -1 prints paths
-            # one per line. awk strips the metadata header.
-            unzip -Z -1 "../tmux-${{ matrix.target }}.zip" 2>/dev/null > /tmp/zip-entries.txt || true
-            if [ ! -s /tmp/zip-entries.txt ]; then
-                unzip -l "../tmux-${{ matrix.target }}.zip" 2>/dev/null \
-                  | awk '/^[[:space:]]+[0-9]/ {print $NF}' > /tmp/zip-entries.txt || true
-            fi
+            ENTRIES=$(unzip -Z -1 "../tmux-${{ matrix.target }}.zip" 2>/dev/null)
+            echo "==> zip entry count: $(echo "$ENTRIES" | wc -l)"
+            echo "==> first 3 entries:"
+            echo "$ENTRIES" | head -3
             while IFS= read -r entry; do
                 [ -z "$entry" ] && continue
                 case "$entry" in
-                    bin\*) target="tmux-${{ matrix.target }}/bin" ;;
-                    man\man1\*) target="tmux-${{ matrix.target }}/man/man1" ;;
+                    bin\*|bin/*) target="tmux-${{ matrix.target }}/bin" ;;
+                    man\*|man/*) target="tmux-${{ matrix.target }}/man/man1" ;;
                     *) target="tmux-${{ matrix.target }}" ;;
                 esac
                 mkdir -p "$target"
                 unzip -j -q -o "../tmux-${{ matrix.target }}.zip" "$entry" -d "$target" 2>/dev/null || true
-            done < /tmp/zip-entries.txt
+            done <<< "$ENTRIES"
+            echo "==> post-extract layout:"
+            find "tmux-${{ matrix.target }}" -maxdepth 2 -type d
+            echo "==> bin/ contents:"
+            ls -la "tmux-${{ matrix.target }}/bin/" | head -10
+
           fi
           ls -la "tmux-${{ matrix.target }}/bin/"
 
