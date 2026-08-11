@@ -128,7 +128,7 @@ jobs:
             # are 'bin/', 'tmux.cmd', 'LICENSE' at the root).
             # The Linux/macOS tarball has a 'tmux-<target>/' prefix
             # — we normalize both to that layout here.
-            mkdir -p "tmux-${{ matrix.target }}"
+            mkdir -p "tmux-${{ matrix.target }}/bin"
             cd "tmux-${{ matrix.target }}"
             unzip -q -b -o "../tmux-${{ matrix.target }}.zip" 2>&1 || true
             cd ..
