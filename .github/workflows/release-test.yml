@@ -167,7 +167,8 @@ jobs:
           fi
 
           BIN="dist/tmux-${{ matrix.target }}/bin/tmux"
-          [ -f "$BIN.exe" ] && BIN="$BIN.exe"
+          [ "$TMUX_OS" = "windows" ] && BIN="$BIN.exe"
+          [ -f "$BIN" ] || BIN="dist/tmux-${{ matrix.target }}/bin/tmux.exe"
 
           echo "==> version banner"
           $ARCH_BIN "$BIN" -V
