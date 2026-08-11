@@ -14,6 +14,32 @@ the alternatives that didn't ship**.
 
 ---
 
+## Known runtime issue: `no suitable socket path` on bare Windows (issue #5)
+
+tmux 3.7b has **two distinct failure paths** that both look like
+"tmux won't start":
+
+1. **`n == 0` → "no suitable socket path"** (`tmux.c:199-203`)
+   Both `$TMUX_TMPDIR` and `/tmp` fail to `realpath()`. Bare cmd.exe
+   has no MSYS2 install → `/tmp` mount target depends on env vars that
+   aren't set → `realpath` returns NULL → both candidates dropped.
+
+2. **Permissions check → "directory %s has unsafe permissions"**
+   (`tmux.c:225-228`). Active because `TMUX_SOCK_PERM = 7` (default for
+   non-cygwin host_os=msys; the `if IS_CYGWIN / -DTMUX_SOCK_PERM=0`
+   block in `Makefile.am:78-82` doesn't fire). MSYS2 `noacl` mount
+   mode makes `chmod 700` silently fail → directory reports 0755 →
+   tmux refuses.
+
+**Workarounds** (full discussion in issue #5):
+- `-S <path>` (bypasses both paths)
+- Set `TMPDIR` to a real existing directory
+- Run inside Git Bash / MSYS2 shell
+- v0.2.1 direction: combine `-DTMUX_SOCK_PERM=0` (build flag) +
+  `tmux.c:make_label` env-var fallback patch
+
+---
+
 ## Path A (shipped in v0.2.0): MSYS2 + msys gcc, on `windows-latest`
 
 Quick recap for context — full build log lives in `AGENTS.md`.
