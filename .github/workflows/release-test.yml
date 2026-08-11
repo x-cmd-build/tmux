@@ -98,12 +98,14 @@ jobs:
           $zip = "tmux-${{ matrix.target }}.zip"
           $dst = "tmux-${{ matrix.target }}"
           Remove-Item -Recurse -Force $dst -ErrorAction SilentlyContinue
-          # Use .NET ZipFile via PowerShell — handles backslash paths
-          # (PowerShell Compress-Archive default) natively.
+          # ExtractToDirectory requires the destination dir to exist;
+          # the zip has no top-level dir prefix, so we create the
+          # target dir ourselves.
+          New-Item -ItemType Directory -Path $dst -Force | Out-Null
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           [System.IO.Compression.ZipFile]::ExtractToDirectory(
             (Resolve-Path $zip).Path,
-            (Resolve-Path .).Path
+            (Resolve-Path $dst).Path
           )
           # The zip's 'bin\' (backslash) entries were extracted as
           # a literal 'bin\' subdir. We also have an empty 'bin/' from
