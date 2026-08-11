@@ -128,21 +128,29 @@ jobs:
             # are 'bin/', 'tmux.cmd', 'LICENSE' at the root).
             # The Linux/macOS tarball has a 'tmux-<target>/' prefix
             # — we normalize both to that layout here.
-            mkdir -p "tmux-${{ matrix.target }}/bin"
-            cd "tmux-${{ matrix.target }}"
-            unzip -q -b -o "../tmux-${{ matrix.target }}.zip" 2>&1 || true
-            cd ..
-            # The zip uses 'bin\' (backslash) as a directory name.
-            # After unzip -b, entries land in 'bin\' as a literal
-            # subdir. We also have an empty 'bin/' from the dir entry.
-            # Merge: rename 'bin\' to 'bin_x', move contents into
-            # 'bin/', then drop bin_x.
-            if [ -d "tmux-${{ matrix.target }}/bin\\" ]; then
-                mv "tmux-${{ matrix.target }}/bin\\" "tmux-${{ matrix.target }}/bin_x"
-                find "tmux-${{ matrix.target }}/bin_x" -mindepth 1 -maxdepth 1 \
-                    -exec mv {} "tmux-${{ matrix.target }}/bin/" \;
-                rm -rf "tmux-${{ matrix.target }}/bin_x"
+            # The zip has no top-level dir prefix and uses 'bin\'
+            # (backslash) as a subdir name (PowerShell Compress-Archive
+            # default). Use 'unzip -j' to junk paths and dispatch
+            # each entry to its target dir explicitly. This avoids
+            # the backslash-dir-name rabbit hole entirely.
+            mkdir -p "tmux-${{ matrix.target }}/bin" "tmux-${{ matrix.target }}/man/man1"
+            # Read the zip entry list. unzip -Z -1 prints paths
+            # one per line. awk strips the metadata header.
+            unzip -Z -1 "../tmux-${{ matrix.target }}.zip" 2>/dev/null > /tmp/zip-entries.txt || true
+            if [ ! -s /tmp/zip-entries.txt ]; then
+                unzip -l "../tmux-${{ matrix.target }}.zip" 2>/dev/null \
+                  | awk '/^[[:space:]]+[0-9]/ {print $NF}' > /tmp/zip-entries.txt || true
             fi
+            while IFS= read -r entry; do
+                [ -z "$entry" ] && continue
+                case "$entry" in
+                    bin\*) target="tmux-${{ matrix.target }}/bin" ;;
+                    man\man1\*) target="tmux-${{ matrix.target }}/man/man1" ;;
+                    *) target="tmux-${{ matrix.target }}" ;;
+                esac
+                mkdir -p "$target"
+                unzip -j -q -o "../tmux-${{ matrix.target }}.zip" "$entry" -d "$target" 2>/dev/null || true
+            done < /tmp/zip-entries.txt
           fi
           ls -la "tmux-${{ matrix.target }}/bin/"
 
