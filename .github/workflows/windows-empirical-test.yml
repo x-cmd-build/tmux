@@ -94,20 +94,26 @@ jobs:
           }
 
           "## S11: candidate wrapper from PowerShell" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+          Write-Output "## S11: candidate wrapper from PowerShell"
 
           try {
             # Test 1: -L label
-            & "$candidateWrapper" -L s11 new-session -d 2>&1 | Out-Null
-            "exit (new-session -L s11): $LASTEXITCODE" | Out-File -Append $env:GITHUB_STEP_SUMMARY
-            if ($LASTEXITCODE -eq 0) {
-              & "$candidateWrapper" -L s11 list-sessions 2>&1 | Out-File -Append $env:GITHUB_STEP_SUMMARY
+            $out1 = & "$candidateWrapper" -L s11 new-session -d 2>&1
+            $exit1 = $LASTEXITCODE
+            "exit (new-session -L s11): $exit1" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+            Write-Output "  S11 -L s11 new-session exit=$exit1 output: $($out1 -join ' | ')"
+            if ($exit1 -eq 0) {
+              $out1b = & "$candidateWrapper" -L s11 list-sessions 2>&1
               & "$candidateWrapper" -L s11 kill-server 2>&1 | Out-Null
               "## S11 PASS" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+              Write-Output "  S11 PASS"
             } else {
-              "## S11 FAIL: new-session exited $LASTEXITCODE" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+              "## S11 FAIL: new-session exited $exit1" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+              Write-Output "  S11 FAIL: exit=$exit1"
             }
           } catch {
             "## S11 EXCEPTION: $_" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+            Write-Output "  S11 EXCEPTION: $_"
           }
 
           # Test 2: -S $HOME-style POSIX path
@@ -116,21 +122,28 @@ jobs:
           if (-not (Test-Path $sockDir)) { New-Item -ItemType Directory -Path $sockDir -Force | Out-Null }
 
           "## S11b: candidate wrapper -S POSIX path" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+          Write-Output "## S11b: candidate wrapper -S POSIX path"
           try {
             # Convert $env:USERPROFILE to POSIX /c/... style
             $posixHome = "/c/" + ($env:USERPROFILE -replace '^C:\\', '') -replace '\\', '/'
             $posixSock = $posixHome + "/.tmux-s11-test/default"
-            & "$candidateWrapper" -S "$posixSock" new-session -d 2>&1 | Out-Null
-            "exit (new-session -S POSIX): $LASTEXITCODE" | Out-File -Append $env:GITHUB_STEP_SUMMARY
-            if ($LASTEXITCODE -eq 0) {
+            Write-Output "  POSIX socket path: $posixSock"
+            $out2 = & "$candidateWrapper" -S "$posixSock" new-session -d 2>&1
+            $exit2 = $LASTEXITCODE
+            "exit (new-session -S POSIX): $exit2" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+            Write-Output "  S11b -S POSIX new-session exit=$exit2 output: $($out2 -join ' | ')"
+            if ($exit2 -eq 0) {
               & "$candidateWrapper" -S "$posixSock" list-sessions 2>&1 | Out-File -Append $env:GITHUB_STEP_SUMMARY
               & "$candidateWrapper" -S "$posixSock" kill-server 2>&1 | Out-Null
               "## S11b PASS" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+              Write-Output "  S11b PASS"
             } else {
-              "## S11b FAIL: new-session exited $LASTEXITCODE" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+              "## S11b FAIL: new-session exited $exit2" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+              Write-Output "  S11b FAIL: exit=$exit2"
             }
           } catch {
             "## S11b EXCEPTION: $_" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+            Write-Output "  S11b EXCEPTION: $_"
           }
 
           Remove-Item -Recurse -Force $sockDir -ErrorAction SilentlyContinue
