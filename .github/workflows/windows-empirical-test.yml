@@ -107,6 +107,7 @@ jobs:
             Write-Output "  S11 -L s11 new-session exit=$exit1 output: $($out1 -join ' | ')"
             if ($exit1 -eq 0) {
               $out1b = & "$candidateWrapper" -L s11 list-sessions 2>&1
+              Write-Output "  S11 list-sessions output: $($out1b -join ' | ')"
               & "$candidateWrapper" -L s11 kill-server 2>&1 | Out-Null
               "## S11 PASS" | Out-File -Append $env:GITHUB_STEP_SUMMARY
               Write-Output "  S11 PASS"
