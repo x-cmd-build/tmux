@@ -99,32 +99,31 @@ jobs:
           $dst = "tmux-${{ matrix.target }}"
           Remove-Item -Recurse -Force $dst -ErrorAction SilentlyContinue
           # ExtractToDirectory requires the destination dir to exist;
-          # the zip has no top-level dir prefix, so we create the
-          # target dir ourselves.
+          # the zip has no top-level dir prefix.
           New-Item -ItemType Directory -Path $dst -Force | Out-Null
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           [System.IO.Compression.ZipFile]::ExtractToDirectory(
             (Resolve-Path $zip).Path,
             (Resolve-Path $dst).Path
           )
-          # The zip's 'bin\' (backslash) entries were extracted as
-          # a literal 'bin\' subdir. We also have an empty 'bin/' from
-          # the zip's directory entry. Merge: use cmd.exe's ren (which
-          # handles backslash paths; PowerShell's Rename-Item treats
-          # paths ending in backslash as device names and fails).
-          $oldBin = Join-Path $dst ('bin' + [char]92)
-          $backDirX = Join-Path $dst 'bin_x'
-          $newBin = Join-Path $dst 'bin/'  # forward slash avoids trailing-backslash issues
-          if (Test-Path $oldBin) {
-              # Use cmd.exe ren to avoid PowerShell's device-name
-              # interpretation of trailing backslashes.
-              & cmd /c ren ("$dst\bin\\") bin_x | Out-Null
-              if (Test-Path $backDirX) {
-                  Get-ChildItem -Path $backDirX -Force | ForEach-Object {
-                      Move-Item -Path $_.FullName -Destination $newBin -Force
+          # The zip's 'bin' (backslash) entries were extracted as
+          # a literal 'bin' subdir (PowerShell Compress-Archive
+          # default). We also have an empty 'bin/' from the zip's
+          # directory entry. Merge: move files from 'bin' into
+          # 'bin/' (using [System.IO.File]::Move which doesn't have
+          # PowerShell's device-name / trailing-backslash issues).
+          $oldBin = [System.IO.Path]::Combine($dst, ('bin' + [char]92))
+          $newBin = [System.IO.Path]::Combine($dst, 'bin')
+          if ([System.IO.Directory]::Exists($oldBin)) {
+              [System.IO.Directory]::CreateDirectory($newBin) | Out-Null
+              [System.IO.Directory]::EnumerateFiles($oldBin) | ForEach-Object {
+                  $target = [System.IO.Path]::Combine($newBin, [System.IO.Path]::GetFileName($_))
+                  if ([System.IO.File]::Exists($target)) {
+                      [System.IO.File]::Delete($target)
                   }
+                  [System.IO.File]::Move($_, $target)
               }
-              Remove-Item -Recurse -Force $backDirX
+              [System.IO.Directory]::Delete($oldBin)
           }
           Get-ChildItem -Path $dst | Select-Object Name
 
