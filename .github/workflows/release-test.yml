@@ -123,7 +123,11 @@ jobs:
             # Python's zipfile module normalizes backslashes.
             python -c "import zipfile; zipfile.ZipFile('tmux-${{ matrix.target }}.zip').extractall('.')"
           fi
-          ls -la "tmux-${{ matrix.target }}/bin/"
+          echo "==> extracted layout:"
+          ls -la
+          echo "==> looking for tmux-x86_64-windows:"
+          find . -maxdepth 3 -name "tmux-x86_64-windows*" 2>/dev/null
+          ls -la "tmux-${{ matrix.target }}/bin/" 2>&1 || echo "(fallback ls failed)"
 
       - name: Smoke test
         shell: bash
