@@ -1,30 +1,6 @@
 name: release-test
 
 # Multi-platform smoke test for published release artifacts.
-#
-# Distinct from build-and-test.yml (which verifies the BUILD on the
-# build runner) and release.yml (which produces the artifacts).
-# release-test downloads the SHIPPED artifacts from a GitHub Release
-# and exercises them on each target platform — so a binary that
-# builds cleanly but crashes on first run (e.g. dyld path issue,
-# missing DLL on PATH) is caught here, before users hit it.
-#
-# Triggers:
-#   - workflow_dispatch: manual; specify a tag (default: latest).
-#   - release published: automatic; runs against the newly released tag.
-#
-# What it does per target:
-#   1. Download the per-target archive + top-level SHA256SUMS via gh.
-#   2. Verify SHA256 matches the entry in SHA256SUMS.
-#   3. Extract the archive.
-#   4. Run `tmux -V` — verifies the binary loads and reports the
-#      version we vendored.
-#   5. Run functional smoke: new-session + send-keys + capture-pane,
-#      prove the client→server→pane pipeline works on this OS.
-#   6. Report result to $GITHUB_STEP_SUMMARY.
-#
-# x86_64-macos is tested via `arch -x86_64` on a macos-latest
-# (aarch64) runner — Rosetta 2 is pre-installed on GH Actions runners.
 on:
   workflow_dispatch:
     inputs:
@@ -54,11 +30,7 @@ jobs:
           - { target: x86_64-linux-musl,  runner: ubuntu-latest,    os: linux,  arch: native }
           - { target: aarch64-linux-musl, runner: ubuntu-24.04-arm, os: linux,  arch: native }
           - { target: aarch64-macos,      runner: macos-latest,     os: macos,  arch: native }
-          # x86_64-macos: tested via Rosetta 2 on a macos-latest
-          # (aarch64) runner. Rosetta is pre-installed.
           - { target: x86_64-macos,       runner: macos-latest,     os: macos,  arch: x86_64 }
-          # x86_64-windows: tested on windows-latest via msys2 bash.
-          # tty-less smoke — version check + control-mode probe only.
           - { target: x86_64-windows,     runner: windows-latest,   os: windows, arch: native }
     steps:
       - name: Resolve tag
@@ -70,7 +42,6 @@ jobs:
           else
             echo "value=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
           fi
-          echo "tag=${{ steps.tag.outputs.value }}"
 
       - name: Download release artifacts
         shell: bash
@@ -85,10 +56,7 @@ jobs:
             --pattern "tmux-${{ matrix.target }}.zip" \
             --pattern "SHA256SUMS" \
             --dir .
-          echo "==> dist contents:"
           ls -la
-          echo "==> workspace scripts dir contents:"
-          ls -la "$GITHUB_WORKSPACE/scripts/" 2>&1 | head -10 || echo "NO SCRIPTS DIR"
 
       - name: Verify SHA256SUMS entry
         shell: bash
@@ -107,53 +75,53 @@ jobs:
           fi
           if [ "$EXPECTED" != "$ACTUAL" ]; then
             echo "FAIL: SHA256 mismatch for $ARCHIVE" >&2
-            echo "  expected=$EXPECTED" >&2
-            echo "  actual  =$ACTUAL" >&2
             exit 1
           fi
           echo "OK: SHA256 verified for $ARCHIVE"
 
-      - name: Extract archive
+      # Linux/macOS: tar.xz has a tmux-<target>/ prefix; tar extracts
+      # cleanly. Windows: zip has no top-level prefix and uses backslash
+      # paths from PowerShell Compress-Archive. We extract into a
+      # PowerShell-managed temp dir on Windows, then use PowerShell's
+      # Expand-Archive which handles backslash paths natively.
+      - name: Extract archive (POSIX)
+        if: matrix.os != 'windows'
         shell: bash
         working-directory: dist
-        run: |
-          if [ -f "tmux-${{ matrix.target }}.tar.xz" ]; then
-            tar xJf "tmux-${{ matrix.target }}.tar.xz"
-          else
-            # Windows zip created by PowerShell's Compress-Archive
-            # uses backslash path separators. unzip warns but extracts
-            # in binary mode (-b).
-            #
-            # Also, this zip has NO top-level dir prefix (entries
-            # are 'bin/', 'tmux.cmd', 'LICENSE' at the root).
-            # The Linux/macOS tarball has a 'tmux-<target>/' prefix
-            # — we normalize both to that layout here.
-            # The zip has no top-level dir prefix and uses 'bin\'
-            # (backslash) as a subdir name (PowerShell Compress-Archive
-            # default). Use 'unzip -j' (junk paths) so 'bin	mux.exe'
-            # extracts as just 'tmux.exe' into a target dir we choose.
-            # Use 'unzip -l' to list entries (more portable than -Z which
-            # some unzips don't support). Strip the metadata header
-            # (3 lines: Archive, Length, ---).
-            unzip -l "../tmux-${{ matrix.target }}.zip" 2>/dev/null \
-                | awk 'NF >= 4 && /^[ 0-9]/ {print $NF}' \
-                | tail -n +1 > /tmp/zip-entries.txt
-            echo "==> zip entry count: $(wc -l < /tmp/zip-entries.txt)"
-            while IFS= read -r entry; do
-                [ -z "$entry" ] && continue
-                case "$entry" in
-                    bin\*|bin/*) target="tmux-${{ matrix.target }}/bin" ;;
-                    man\*|man/*) target="tmux-${{ matrix.target }}/man/man1" ;;
-                    *) target="tmux-${{ matrix.target }}" ;;
-                esac
-                mkdir -p "$target"
-                unzip -j -q -o "../tmux-${{ matrix.target }}.zip" "$entry" -d "$target" 2>/dev/null || true
-            done < /tmp/zip-entries.txt
-            echo "==> bin/ contents:"
-            ls -la "tmux-${{ matrix.target }}/bin/" | head -10
+        run: tar xJf "tmux-${{ matrix.target }}.tar.xz"
 
-          fi
-          ls -la "tmux-${{ matrix.target }}/bin/"
+      - name: Extract archive (Windows)
+        if: matrix.os == 'windows'
+        shell: pwsh
+        working-directory: dist
+        run: |
+          $zip = "tmux-${{ matrix.target }}.zip"
+          $dst = "tmux-${{ matrix.target }}"
+          Remove-Item -Recurse -Force $dst -ErrorAction SilentlyContinue
+          # Use .NET ZipFile via PowerShell — handles backslash paths
+          # (PowerShell Compress-Archive default) natively.
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          [System.IO.Compression.ZipFile]::ExtractToDirectory(
+            (Resolve-Path $zip).Path,
+            (Resolve-Path .).Path
+          )
+          # The zip's 'bin\' (backslash) entries were extracted as
+          # a literal 'bin\' subdir. We also have an empty 'bin/' from
+          # the zip's directory entry. Merge: rename 'bin\' to 'bin_x',
+          # move its contents into 'bin/', then drop bin_x.
+          $backDir = Join-Path $dst 'bin_'
+          $backDirX = Join-Path $dst 'bin_x'
+          $oldBin = Join-Path $dst 'bin\'
+          if (Test-Path $oldBin) {
+              Rename-Item $oldBin $backDirX -Force
+              if (Test-Path $backDirX) {
+                  Get-ChildItem -Path $backDirX -Force | ForEach-Object {
+                      Move-Item -Path $_.FullName -Destination (Join-Path $dst 'bin\') -Force
+                  }
+              }
+              Remove-Item -Recurse -Force $backDirX
+          }
+          Get-ChildItem -Path $dst | Select-Object Name
 
       - name: Smoke test
         shell: bash
@@ -161,7 +129,6 @@ jobs:
           TMUX_ARCH: ${{ matrix.arch }}
           TMUX_OS: ${{ matrix.os }}
         run: |
-          # arch wrapper for cross-arch macOS binaries.
           ARCH_BIN=""
           if [ "$TMUX_OS" = "macos" ] && [ "$TMUX_ARCH" = "x86_64" ]; then
             ARCH_BIN="arch -x86_64"
@@ -175,70 +142,31 @@ jobs:
           $ARCH_BIN "$BIN" -V
 
           if [ "$TMUX_OS" = "windows" ]; then
-            # Windows smoke — verify v0.2.2+ wrapper works end-to-end.
-            # The runner has Git Bash (windows-latest image includes
-            # git-for-windows preinstalled), so the registry lookup
-            # in tmux.cmd should succeed.
-            #
             # v0.2.2+ requires the wrapper for runtime DLL resolution
-            # (no bundled msys-2.0.dll). Verify:
-            #   1. tmux.exe -V loads and reports vendored version
-            #   2. tmux.cmd (zip root) is reachable
-            #   3. tmux.cmd -V invokes tmux.exe via the wrapper
-            #   4. tmux.cmd new-session -d starts a server (path-1 fix)
-            #   5. tmux.cmd list-sessions / kill-server cleanup
+            # (no bundled msys-2.0.dll).
             WRAPPER="dist/tmux-${{ matrix.target }}/tmux.cmd"
-            if [ ! -f "$WRAPPER" ]; then
-                echo "FAIL: $WRAPPER not found (v0.2.2+ requires wrapper at zip root)" >&2
-                exit 1
-            fi
-            if [ ! -f "$BIN" ]; then
-                echo "FAIL: $BIN not found" >&2
-                exit 1
-            fi
-            if [ -f "dist/tmux-${{ matrix.target }}/bin/msys-2.0.dll" ]; then
-                echo "FAIL: bundled msys-2.0.dll present (v0.2.2+ should NOT bundle it)" >&2
-                exit 1
-            fi
+            [ ! -f "$WRAPPER" ] && { echo "FAIL: $WRAPPER not found" >&2; exit 1; }
+            [ ! -f "$BIN" ] && { echo "FAIL: $BIN not found" >&2; exit 1; }
+            [ -f "dist/tmux-${{ matrix.target }}/bin/msys-2.0.dll" ] && { echo "FAIL: bundled msys-2.0.dll present" >&2; exit 1; }
 
-            echo "==> tmux.exe -V (direct)"
-            "$BIN" -V
             BIN_VER=$("$BIN" -V | head -1)
-
-            echo "==> tmux.cmd -V (via wrapper)"
-            "$WRAPPER" -V
             WRAPPER_VER=$("$WRAPPER" -V | head -1)
-            if [ "$BIN_VER" != "$WRAPPER_VER" ]; then
-                echo "FAIL: wrapper version mismatch: direct='$BIN_VER' wrapper='$WRAPPER_VER'" >&2
-                exit 1
-            fi
-            echo "OK: wrapper reports same version as direct invocation"
+            [ "$BIN_VER" != "$WRAPPER_VER" ] && { echo "FAIL: wrapper version mismatch" >&2; exit 1; }
+            echo "OK: wrapper version matches"
 
-            echo "==> tmux.cmd -L win-smoke new-session -d"
-            "$WRAPPER" -L win-smoke new-session -d
-            WRAPPER_EXIT=$?
-            if [ "$WRAPPER_EXIT" -ne 0 ]; then
-                echo "FAIL: tmux.cmd new-session exited $WRAPPER_EXIT" >&2
-                exit 1
-            fi
-
-            echo "==> tmux.cmd -L win-smoke list-sessions"
+            "$WRAPPER" -L win-smoke new-session -d || { echo "FAIL: tmux.cmd new-session" >&2; exit 1; }
             LIST_OUT=$("$WRAPPER" -L win-smoke list-sessions 2>&1)
-            echo "$LIST_OUT"
             case "$LIST_OUT" in
-              *win-smoke*) echo "OK: wrapper successfully started server" ;;
-              *) echo "FAIL: list-sessions did not return expected session" >&2; exit 1 ;;
+              *win-smoke*) echo "OK: wrapper started server" ;;
+              *) echo "FAIL: list-sessions: $LIST_OUT" >&2; exit 1 ;;
             esac
-
-            echo "==> tmux.cmd -L win-smoke kill-server"
             "$WRAPPER" -L win-smoke kill-server
             echo "OK: Windows smoke (v0.2.2 wrapper end-to-end)"
             exit 0
           fi
 
-          # POSIX functional smoke: new-session + send-keys + capture-pane.
+          # POSIX functional smoke
           SOCK="/tmp/release-test-smoke-$$"
-          echo "==> functional smoke (new-session + send-keys + capture-pane)"
           $ARCH_BIN "$BIN" -S "$SOCK.sock" new-session -d -x 80 -y 24 -s smoke 'sleep 30' \
             || $ARCH_BIN "$BIN" -S "$SOCK.sock" new-session -d -x 80 -y 24 -s smoke 'sleep 30'
           $ARCH_BIN "$BIN" -S "$SOCK.sock" send-keys -t smoke 'echo release-test-ok' Enter
@@ -246,27 +174,15 @@ jobs:
           CAPTURED=$($ARCH_BIN "$BIN" -S "$SOCK.sock" capture-pane -p -t smoke 2>&1 | head -c 400)
           case "$CAPTURED" in
             *release-test-ok*)
-              echo "OK: smoke captured 'release-test-ok' on pane"
+              echo "OK: smoke captured release-test-ok"
+              $ARCH_BIN "$BIN" -S "$SOCK.sock" kill-server
+              rm -f "$SOCK.sock"
+              exit 0
               ;;
             *)
-              echo "FAIL: smoke did NOT capture 'release-test-ok' — got: $CAPTURED" >&2
+              echo "FAIL: smoke did NOT capture: $CAPTURED" >&2
+              $ARCH_BIN "$BIN" -S "$SOCK.sock" kill-server 2>/dev/null || true
+              rm -f "$SOCK.sock"
               exit 1
               ;;
           esac
-          $ARCH_BIN "$BIN" -S "$SOCK.sock" kill-server 2>/dev/null || true
-          rm -f "$SOCK.sock"
-          echo "OK: smoke passed"
-
-      - name: Report result
-        if: always()
-        run: |
-          {
-            echo "### release-test result for ${{ matrix.target }}"
-            echo
-            echo "| field | value |"
-            echo "|-------|-------|"
-            echo "| tag | \`${{ steps.tag.outputs.value }}\` |"
-            echo "| runner | \`${{ matrix.runner }}\` |"
-            echo "| arch | \`${{ matrix.arch }}\` |"
-            echo "| result | **${{ job.status }}** |"
-          } >> "$GITHUB_STEP_SUMMARY"
