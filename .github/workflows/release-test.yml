@@ -121,32 +121,21 @@ jobs:
             tar xJf "tmux-${{ matrix.target }}.tar.xz"
           else
             # Windows zip created by PowerShell's Compress-Archive
-            # uses backslash path separators. unzip refuses them
-            # with 'appears to use backslashes as path separators'.
-            # Python's zipfile module normalizes backslashes; the
-            # script content is inlined here because the actions/checkout
-            # for windows-latest+windows-2025-vs2026 was observed
-            # to NOT include scripts/ in the workspace tree.
+            # uses backslash path separators. unzip warns but extracts
+            # in binary mode (-b).
             #
             # Also, this zip has NO top-level dir prefix (entries
             # are 'bin/', 'tmux.cmd', 'LICENSE' at the root).
             # The Linux/macOS tarball has a 'tmux-<target>/' prefix
             # — we normalize both to that layout here.
             mkdir -p "tmux-${{ matrix.target }}"
-            python -c "
-import sys, os, zipfile
-src, dst = sys.argv[1], sys.argv[2]
-with zipfile.ZipFile(src) as z:
-    for name in z.namelist():
-        n = name.replace('\\\\', '/')
-        if n.endswith('/'):
-            os.makedirs(os.path.join(dst, n), exist_ok=True)
-        else:
-            target = os.path.join(dst, n)
-            os.makedirs(os.path.dirname(target), exist_ok=True)
-            with z.open(name) as src_f, open(target, 'wb') as dst_f:
-                dst_f.write(src_f.read())
-" "tmux-${{ matrix.target }}.zip" "tmux-${{ matrix.target }}"
+            cd "tmux-${{ matrix.target }}"
+            unzip -q -b -o "../tmux-${{ matrix.target }}.zip" 2>&1 || true
+            cd ..
+            # backslash paths extracted as 'bin\\\\' — convert to 'bin/'
+            if [ -d "tmux-${{ matrix.target }}/bin\\" ]; then
+                mv "tmux-${{ matrix.target }}/bin\\" "tmux-${{ matrix.target }}/bin"
+            fi
           fi
           ls -la "tmux-${{ matrix.target }}/bin/"
 
