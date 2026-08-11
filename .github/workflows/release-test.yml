@@ -85,7 +85,10 @@ jobs:
             --pattern "tmux-${{ matrix.target }}.zip" \
             --pattern "SHA256SUMS" \
             --dir .
+          echo "==> dist contents:"
           ls -la
+          echo "==> workspace scripts dir contents:"
+          ls -la "$GITHUB_WORKSPACE/scripts/" 2>&1 | head -10 || echo "NO SCRIPTS DIR"
 
       - name: Verify SHA256SUMS entry
         shell: bash
