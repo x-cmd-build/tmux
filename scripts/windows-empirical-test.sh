@@ -131,6 +131,36 @@ else
     record "S9-no-bundle-wrapper-enhanced" "SKIP" "GIT_BIN not detected"
 fi
 
+# === S10: v0.2.2 candidate wrapper (finds Git Bash via registry, injects PATH, exec tmux.exe) ===
+#   This requires the wrapper file to exist + bundled DLL removed.
+#   Tests the proposed v0.2.2 design: no bundle + wrapper auto-injects Git Bash.
+if [ -f "$TMUX_ROOT/scripts/tmux-v022-candidate.cmd" ]; then
+    # Move DLL out of the way (so Win32 DLL search uses Git Bash via PATH)
+    if [ -f "$TMUX_ROOT/bin/msys-2.0.dll" ]; then
+        mv "$TMUX_ROOT/bin/msys-2.0.dll" "$TMUX_ROOT/bin/msys-2.0.dll.bak"
+    fi
+
+    # Test from bash context (mimics user in Git Bash running the wrapper)
+    run_scenario "S10-v022-wrapper-bash" \
+        "'$TMUX_ROOT/scripts/tmux-v022-candidate.cmd' -L s10 new-session -d && '$TMUX_ROOT/scripts/tmux-v022-candidate.cmd' -L s10 list-sessions && '$TMUX_ROOT/scripts/tmux-v022-candidate.cmd' -L s10 kill-server"
+
+    # Test -S POSIX path with the v0.2.2 wrapper
+    SOCK_S10="$HOME/.tmux-s10-test/default"
+    rm -rf "$HOME/.tmux-s10-test" 2>/dev/null
+    mkdir -p "$HOME/.tmux-s10-test" 2>/dev/null
+    run_scenario "S10b-v022-wrapper-S-HOME" \
+        "'$TMUX_ROOT/scripts/tmux-v022-candidate.cmd' -S '$SOCK_S10' new-session -d && '$TMUX_ROOT/scripts/tmux-v022-candidate.cmd' -S '$SOCK_S10' list-sessions && '$TMUX_ROOT/scripts/tmux-v022-candidate.cmd' -S '$SOCK_S10' kill-server" \
+        "rm -rf '$HOME/.tmux-s10-test'"
+
+    # Restore bundle
+    if [ -f "$TMUX_ROOT/bin/msys-2.0.dll.bak" ]; then
+        mv "$TMUX_ROOT/bin/msys-2.0.dll.bak" "$TMUX_ROOT/bin/msys-2.0.dll"
+    fi
+else
+    record "S10-v022-wrapper-bash" "SKIP" "candidate wrapper not found"
+    record "S10b-v022-wrapper-S-HOME" "SKIP" "depends on S10"
+fi
+
 # === S5: -S with HOME-derived POSIX path (expected to FAIL with bundled DLL) ===
 SOCK_S5="$HOME/.tmux-s5-test/default"
 rm -rf "$HOME/.tmux-s5-test" 2>/dev/null
