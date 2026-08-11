@@ -114,7 +114,7 @@ jobs:
           # paths ending in backslash as device names and fails).
           $oldBin = Join-Path $dst ('bin' + [char]92)
           $backDirX = Join-Path $dst 'bin_x'
-          $newBin = Join-Path $dst ('bin' + [char]92)
+          $newBin = Join-Path $dst 'bin/'  # forward slash avoids trailing-backslash issues
           if (Test-Path $oldBin) {
               # Use cmd.exe ren to avoid PowerShell's device-name
               # interpretation of trailing backslashes.
