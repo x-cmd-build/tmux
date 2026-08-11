@@ -92,40 +92,16 @@ jobs:
 
       - name: Extract archive (Windows)
         if: matrix.os == 'windows'
-        shell: pwsh
+        shell: bash
         working-directory: dist
         run: |
-          $zip = "tmux-${{ matrix.target }}.zip"
-          $dst = "tmux-${{ matrix.target }}"
-          Remove-Item -Recurse -Force $dst -ErrorAction SilentlyContinue
-          # ExtractToDirectory requires the destination dir to exist;
-          # the zip has no top-level dir prefix.
-          New-Item -ItemType Directory -Path $dst -Force | Out-Null
-          Add-Type -AssemblyName System.IO.Compression.FileSystem
-          [System.IO.Compression.ZipFile]::ExtractToDirectory(
-            (Resolve-Path $zip).Path,
-            (Resolve-Path $dst).Path
-          )
-          # The zip's 'bin' (backslash) entries were extracted as
-          # a literal 'bin' subdir (PowerShell Compress-Archive
-          # default). We also have an empty 'bin/' from the zip's
-          # directory entry. Merge: move files from 'bin' into
-          # 'bin/' (using [System.IO.File]::Move which doesn't have
-          # PowerShell's device-name / trailing-backslash issues).
-          $oldBin = [System.IO.Path]::Combine($dst, ('bin' + [char]92))
-          $newBin = [System.IO.Path]::Combine($dst, 'bin')
-          if ([System.IO.Directory]::Exists($oldBin)) {
-              [System.IO.Directory]::CreateDirectory($newBin) | Out-Null
-              [System.IO.Directory]::EnumerateFiles($oldBin) | ForEach-Object {
-                  $target = [System.IO.Path]::Combine($newBin, [System.IO.Path]::GetFileName($_))
-                  if ([System.IO.File]::Exists($target)) {
-                      [System.IO.File]::Delete($target)
-                  }
-                  [System.IO.File]::Move($_, $target)
-              }
-              [System.IO.Directory]::Delete($oldBin)
-          }
-          Get-ChildItem -Path $dst | Select-Object Name
+          # Use Python's zipfile to extract. We use printf to write
+          # the script (heredoc would conflict with YAML's '<<' merge
+          # key syntax).
+          rm -rf "tmux-${{ matrix.target }}"
+          printf 'import sys, os, zipfile\nsrc, dst = sys.argv[1], sys.argv[2]\nos.makedirs(dst, exist_ok=True)\nwith zipfile.ZipFile(src) as z:\n    for name in z.namelist():\n        n = name.replace(chr(92), chr(47))\n        target = os.path.join(dst, n)\n        if name.endswith(chr(47)) or n.endswith(chr(47)):\n            os.makedirs(target, exist_ok=True)\n        else:\n            os.makedirs(os.path.dirname(target), exist_ok=True)\n            with z.open(name) as src_f, open(target, "wb") as dst_f:\n                dst_f.write(src_f.read())\n' > /tmp/extract_zip.py
+          python /tmp/extract_zip.py "tmux-${{ matrix.target }}.zip" "tmux-${{ matrix.target }}"
+          ls -la "tmux-${{ matrix.target }}/bin/"
 
       - name: Smoke test
         shell: bash
