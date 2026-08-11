@@ -114,14 +114,14 @@ jobs:
         shell: bash
         working-directory: dist
         run: |
-          # Use shell tools that respect our CWD. PowerShell's
-          # Expand-Archive -DestinationPath . uses PowerShell's CWD,
-          # not the parent shell's, so we use bash's unzip on Windows
-          # (Git Bash ships unzip).
           if [ -f "tmux-${{ matrix.target }}.tar.xz" ]; then
             tar xJf "tmux-${{ matrix.target }}.tar.xz"
           else
-            unzip -q -o "tmux-${{ matrix.target }}.zip"
+            # Windows zip created by PowerShell's Compress-Archive
+            # uses backslash path separators. unzip refuses them
+            # with 'appears to use backslashes as path separators'.
+            # Python's zipfile module normalizes backslashes.
+            python -c "import zipfile; zipfile.ZipFile('tmux-${{ matrix.target }}.zip').extractall('.')"
           fi
           ls -la "tmux-${{ matrix.target }}/bin/"
 
