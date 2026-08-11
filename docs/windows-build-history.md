@@ -54,6 +54,32 @@ acceptable trade-off because:
 - `tmux.cmd` wrapper adds a Windows-only artifact to the zip; not worth
   the maintenance cost for a narrow failure mode
 
+### v0.2.2 fix: drop bundled msys-2.0.dll + re-architect wrapper (2026-08-11)
+
+v0.2.2 supersedes v0.2.1's wrapper-based fix after empirical testing
+(rounds 1-11 of `windows-empirical-test` workflow, see
+[issue #6](https://github.com/x-cmd-build/tmux/issues/6)) showed the
+v0.2.1 wrapper did not actually fix Path 1.
+
+v0.2.2 ships:
+- **Drop** bundled `bin/msys-2.0.dll` from the zip (was 3.3 MB; was
+  isolated sandbox that didn't inherit Git Bash's mount table)
+- **Replace** `scripts/tmux.cmd` with a registry-detecting version that
+  locates Git Bash via `HKLM\SOFTWARE\GitForWindows` (fallback
+  `WOW6432Node`), injects `usr\bin` into the current process's Win32
+  PATH, and execs `bin\tmux.exe`. tmux.exe then loads Git Bash's
+  `msys-2.0.dll` via standard DLL search and inherits Git Bash's
+  `/etc/fstab`.
+
+**Requires Git for Windows** (hard dependency; matches upstream MSYS2's
+distribution model). Paths must be POSIX-style (e.g.,
+`/c/Users/<user>/.tmux/socket`); tmux upstream does no Windows-path
+translation, so neither does the wrapper.
+
+Validated end-to-end in both bash and PowerShell contexts via the
+`windows-empirical-test` GitHub Actions workflow
+(see `scripts/windows-empirical-test.sh`).
+
 ---
 
 ## Path A (shipped in v0.2.0): MSYS2 + msys gcc, on `windows-latest`

@@ -96,6 +96,32 @@ untouched):
 See [issue #5](https://github.com/x-cmd-build/tmux/issues/5)
 + `docs/windows-build-history.md` for full analysis.
 
+**v0.2.2 re-architecture** (replaces v0.2.1's wrapper approach):
+empirical testing (rounds 1-11, runs #31480921773 → #31482208082)
+showed v0.2.1's wrapper did NOT actually fix Path 1 — bundled
+`msys-2.0.dll` is an isolated sandbox that doesn't inherit Git
+Bash's mount table or `/c` translation, so even with `TMPDIR`
+set, `realpath()` fails.
+
+v0.2.2 instead drops the bundled `msys-2.0.dll` from the zip
+(-3.3 MB) and re-architects the wrapper at zip root to:
+1. Locate Git Bash via `HKLM\SOFTWARE\GitForWindows` (fallback
+   `WOW6432Node` for 32-bit Git on 64-bit Windows)
+2. Inject Git Bash's `usr\bin` into the current process's
+   Win32 PATH
+3. Exec `bin\tmux.exe`, which now loads Git Bash's
+   `msys-2.0.dll` via standard DLL search and inherits Git
+   Bash's `/etc/fstab` mount table
+
+**Requires Git for Windows** (hard dependency — matches upstream
+MSYS2's distribution model). Paths must be POSIX-style (e.g.,
+`/c/Users/<user>/.tmux/socket`); tmux upstream does no
+Windows-path translation, so neither does the wrapper.
+
+See [issue #6](https://github.com/x-cmd-build/tmux/issues/6)
++ `docs/windows-build-history.md` for full analysis and
+`scripts/windows-empirical-test.sh` for the validation matrix.
+
 ## Why this notice exists
 
 The wrapper license (BSD-3-Clause) covers the build/packaging

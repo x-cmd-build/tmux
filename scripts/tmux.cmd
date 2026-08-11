@@ -1,27 +1,34 @@
 @echo off
-rem tmux.cmd - Windows wrapper for tmux.exe (v0.2.1+)
+rem tmux.cmd - Windows wrapper for tmux.exe (v0.2.2+)
 rem
-rem Why: bare cmd.exe / PowerShell runs of the bundled tmux.exe fail
-rem with "no suitable socket path" - the bundled msys-2.0.dll has
-rem no /etc/fstab, so realpath("/tmp") returns NULL. tmux's
-rem make_label() (upstream/tmux/tmux.c:187) calls expand_paths() on
-rem $TMUX_TMPDIR and /tmp; both fail realpath() on bare Windows ->
-rem n=0 -> error.
+rem Locates Git Bash via Windows registry and adds its usr/bin to the
+rem current process's Win32 PATH so tmux.exe can find msys-2.0.dll via
+rem the standard DLL search order. tmux.exe inherits Git Bash's mount
+rem table (/etc/fstab), enabling POSIX-style paths (-S /c/Users/foo/...).
 rem
-rem Fix: set TMPDIR to a real existing directory before exec.
+rem Requires: Git for Windows (https://git-scm.com/download/win)
 rem
-rem Placement note: this wrapper must NOT be co-located with
-rem tmux.exe. PATHEXT precedence (.EXE > .CMD) means typing `tmux`
-rem would resolve to tmux.exe directly if both are present. Place
-rem this at the zip ROOT; tmux.exe stays in bin/. Users add the
-rem zip root to PATH so `tmux` resolves to this wrapper, which
-rem then execs bin\tmux.exe.
-rem
-rem Used by: scripts/package.ps1 (zipped at zip root, alongside
-rem LICENSE / NOTICE / README - NOT inside bin/).
+rem Used by: scripts/package.ps1 (zipped at zip root, adjacent to bin/)
+rem so that 'tmux' resolves to this wrapper (PATHEXT precedence:
+rem .EXE > .CMD). Users add the zip root to PATH; this wrapper then
+rem execs bin\tmux.exe.
 
 setlocal
-if not defined TMPDIR set "TMPDIR=%USERPROFILE%\AppData\Local\Temp"
-if not exist "%TMPDIR%" mkdir "%TMPDIR%"
+
+rem Locate Git Bash via registry (HKLM 64-bit, then WOW6432Node 32-bit)
+set "GIT_BIN="
+for /f "tokens=2*" %%i in ('reg query "HKLM\SOFTWARE\GitForWindows" /v InstallPath 2^>nul') do set "GIT_BIN=%%j\usr\bin"
+if "%GIT_BIN%"=="" for /f "tokens=2*" %%i in ('reg query "HKLM\SOFTWARE\WOW6432Node\GitForWindows" /v InstallPath 2^>nul') do set "GIT_BIN=%%j\usr\bin"
+if not exist "%GIT_BIN%\msys-2.0.dll" (
+    echo ERROR: Git Bash not found. Install Git for Windows: https://git-scm.com/download/win 1>&2
+    exit /b 1
+)
+
+rem Inject Git Bash into current process Win32 PATH so tmux.exe finds
+rem Git Bash's msys-2.0.dll via DLL search.
+set "PATH=%GIT_BIN%;%PATH%"
+
+rem Exec tmux.exe (adjacent to this wrapper, at <wrapper_dir>\bin\)
 "%~dp0bin\tmux.exe" %*
+
 endlocal

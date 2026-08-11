@@ -120,13 +120,23 @@ git archive --prefix=upstream/tmux/ <new-tag> | tar x
 
 ## 项目状态
 
+- **v0.2.2** —— Windows binary 围绕 Git Bash 依赖重新架构。
+  删掉 bundled `msys-2.0.dll`（原本 3.3 MB，且是孤立 sandbox 不继承
+  Git Bash mount 表）。zip 根目录的 `tmux.cmd` 包装器通过 Windows
+  registry 找 Git Bash，把 `usr/bin` 注入进程 PATH，让 `tmux.exe` 通过
+  标准 DLL search 加载 Git Bash 的 `msys-2.0.dll`。**硬依赖 Git for
+  Windows**（匹配 upstream MSYS2 的发行模型）。路径**仅支持 POSIX
+  风格**（如 `/c/Users/<user>/.tmux/socket`）。详见
+  [issue #6](https://github.com/x-cmd-build/tmux/issues/6)
+  + `docs/windows-build-history.md`。
 - **v0.2.1** —— Windows "no suitable socket path" 修复。
   `-DTMUX_SOCK_PERM=0` 编译标志（关掉 MSYS2 `noacl` mount 下
   chmod 静默失效触发的 socket 目录权限检查）+ zip 根目录的
   `tmux.cmd` 包装器（裸 cmd.exe 用户启动前设 `TMPDIR`）。
   Linux/macOS 构建不变。详见
   [issue #5](https://github.com/x-cmd-build/tmux/issues/5)
-  + `docs/windows-build-history.md`。
+  + `docs/windows-build-history.md`。**被 v0.2.2 取代** —— 包装器
+  实际未修复 Path 1；bundled DLL 是孤立 sandbox。
 - **v0.2.0** —— Windows MSYS2 构建（option A：MSYS shell + msys gcc）。
   5 平台矩阵。`tmux.exe` + bundled `msys-2.0.dll` + libevent/ncurses
   DLLs 装在同一个 zip 里。详见

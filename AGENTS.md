@@ -11,13 +11,18 @@
   CI build. Resolves x-cmd/x-cmd#397 (tmux version was pinned to `0.1`
   while x eget actually pulled tmux 3.2a — version numbers misaligned
   with upstream).
-- **Windows**: v0.2.0+ ships tmux.exe built via MSYS2 + msys gcc. Links
-  `msys-2.0.dll` (bundled). v0.2.1 adds `-DTMUX_SOCK_PERM=0` build flag
-  + `tmux.cmd` wrapper to fix the `no suitable socket path` failure on
-  bare Windows. See [issue #1](https://github.com/x-cmd-build/tmux/issues/1)
-  for the original build discussion and
-  [issue #5](https://github.com/x-cmd-build/tmux/issues/5) for the
-  socket-path fix.
+- **Windows**: v0.2.2+ ships tmux.exe built via MSYS2 + msys gcc; loads
+  Git Bash's `msys-2.0.dll` (no longer bundled in our zip). The
+  `tmux.cmd` wrapper at zip root locates Git Bash via registry and
+  injects `usr/bin` into the process PATH so tmux.exe finds Git
+  Bash's DLL via standard Win32 DLL search. **Requires Git for
+  Windows** (hard dep — matches upstream MSYS2's distribution model);
+  use **POSIX-style paths only** (`/c/Users/<user>/.tmux/socket`).
+  See [issue #1](https://github.com/x-cmd-build/tmux/issues/1) for
+  the original MSYS2 build, [issue #5](https://github.com/x-cmd-build/tmux/issues/5)
+  for the path-1/path-2 analysis, and
+  [issue #6](https://github.com/x-cmd-build/tmux/issues/6) for the
+  v0.2.2 re-architecture.
 - **Source**: vendored under `upstream/tmux/` via `git archive` from
   <https://github.com/tmux/tmux/releases/tag/3.7>.
 - **Build**: GitHub Actions only (`build-and-test.yml` + `release.yml` +

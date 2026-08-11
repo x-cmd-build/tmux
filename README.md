@@ -128,13 +128,25 @@ Combined work is **ISC** (upstream tmux is ISC). The wrapper layer
 
 ## Project status
 
+- **v0.2.2** — Windows binary re-architected around Git Bash dependency.
+  Drop bundled `msys-2.0.dll` (was 3.3 MB and an isolated sandbox that
+  didn't inherit Git Bash's mount table). `tmux.cmd` wrapper at zip root
+  locates Git Bash via Windows registry and injects `usr/bin` into the
+  process PATH so tmux.exe loads Git Bash's `msys-2.0.dll` via standard
+  DLL search. **Requires Git for Windows** (matches upstream MSYS2's
+  distribution model). Use **POSIX-style paths only** (e.g.,
+  `/c/Users/<user>/.tmux/socket`). See
+  [issue #6](https://github.com/x-cmd-build/tmux/issues/6)
+  + `docs/windows-build-history.md`.
 - **v0.2.1** — Windows "no suitable socket path" fix.
   `-DTMUX_SOCK_PERM=0` build flag (disables the chmod/silent-fail
   socket-dir permissions check that fires under MSYS2's `noacl`
   mount) + `tmux.cmd` wrapper at zip root (sets `TMPDIR` before
   exec for bare cmd.exe users). Linux/macOS builds unchanged.
   See [issue #5](https://github.com/x-cmd-build/tmux/issues/5)
-  + `docs/windows-build-history.md`.
+  + `docs/windows-build-history.md`. **Replaced by v0.2.2** — the
+  wrapper did not actually fix Path 1; bundled DLL was an isolated
+  sandbox.
 - **v0.2.0** — Windows MSYS2 build (option A: MSYS shell + msys gcc).
   5-platform matrix. `tmux.exe` + bundled `msys-2.0.dll` +
   libevent/ncurses DLLs in a single zip. See

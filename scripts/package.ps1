@@ -45,14 +45,23 @@ Copy-Item $srcBin (Join-Path $binDir 'tmux.exe')
 #    Why not name-based search: libevent/ncurses DLLs may live in
 #    /usr/lib, /usr/bin, /mingw64/bin depending on repo + version.
 #    The build step already resolved them via ldd, so we trust that.
+#
+#    v0.2.2: skip msys-2.0.dll — the tmux.cmd wrapper at zip root
+#    injects Git Bash's PATH so tmux.exe loads Git Bash's msys-2.0.dll
+#    instead. Bundling ours would shadow Git Bash's and reintroduce
+#    the DLL-isolation issue from v0.2.1.
 $depsFile = Join-Path $root 'dist-dll-deps.txt'
 if (Test-Path $depsFile) {
     Get-Content $depsFile | ForEach-Object {
         $src = $_.Trim()
         if ($src -and (Test-Path $src)) {
             $name = Split-Path $src -Leaf
-            Copy-Item $src (Join-Path $binDir $name) -Force
-            Write-Output "    bundle: $name (from $src)"
+            if ($name -eq 'msys-2.0.dll') {
+                Write-Output "    skip:    $name (v0.2.2 uses Git Bash's via wrapper)"
+            } else {
+                Copy-Item $src (Join-Path $binDir $name) -Force
+                Write-Output "    bundle: $name (from $src)"
+            }
         } else {
             Write-Warning "WARN: ldd entry not found: $src"
         }
