@@ -72,13 +72,18 @@ sleep 1
 rm -rf "$HOME/.tmux-s"* "$TEMP/.tmux-s"* 2>/dev/null || true
 rm -rf "$USERPROFILE/.tmux-s"* 2>/dev/null || true
 
-# Locate v0.2.2 candidate wrapper from repo (workspace), copy into TMUX_ROOT/scripts
-# so the rest of the test can reference it uniformly.
+# Locate v0.2.2 candidate wrapper from repo (workspace), copy into BOTH
+#   - TMUX_ROOT/scripts/ (for S10/S10b bash scenarios)
+#   - TMUX_ROOT/         (for S11 PowerShell scenarios; mimics real install at zip root)
+# The zip-root location matters because the wrapper uses %~dp0bin\tmux.exe
+# which resolves relative to the wrapper's directory.
 CANDIDATE_SRC="${GITHUB_WORKSPACE:-$(pwd)}/scripts/tmux-v022-candidate.cmd"
-CANDIDATE_DST="$TMUX_ROOT/scripts/tmux-v022-candidate.cmd"
-if [ -f "$CANDIDATE_SRC" ] && [ ! -f "$CANDIDATE_DST" ]; then
+CANDIDATE_DST_SCRIPTS="$TMUX_ROOT/scripts/tmux-v022-candidate.cmd"
+CANDIDATE_DST_ROOT="$TMUX_ROOT/tmux.cmd"
+if [ -f "$CANDIDATE_SRC" ]; then
     mkdir -p "$TMUX_ROOT/scripts"
-    cp "$CANDIDATE_SRC" "$CANDIDATE_DST"
+    [ -f "$CANDIDATE_DST_SCRIPTS" ] || cp "$CANDIDATE_SRC" "$CANDIDATE_DST_SCRIPTS"
+    [ -f "$CANDIDATE_DST_ROOT" ]    || cp "$CANDIDATE_SRC" "$CANDIDATE_DST_ROOT"
 fi
 
 # Ensure tmux.exe + wrapper are on PATH
