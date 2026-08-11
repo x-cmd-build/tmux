@@ -84,7 +84,7 @@ if (Test-Path $wrapperSrc) {
     Write-Warning "WARN: $wrapperSrc not found - skipping tmux.cmd wrapper"
 }
 
-# 5. Zip it up
+# 6. Zip it up
 $zipPath = Join-Path $root "dist/tmux-$target.zip"
 if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
 Add-Type -AssemblyName System.IO.Compression.FileSystem

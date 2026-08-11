@@ -128,9 +128,21 @@ Combined work is **ISC** (upstream tmux is ISC). The wrapper layer
 
 ## Project status
 
-- **v0.1.0** (TBD) — first release; 4-target matrix
-  (Linux musl x2 + macOS x2); based on upstream `tmux 3.7`. Windows
-  deferred to v0.2.0 (see NOTICE.md).
+- **v0.2.1** — Windows "no suitable socket path" fix.
+  `-DTMUX_SOCK_PERM=0` build flag (disables the chmod/silent-fail
+  socket-dir permissions check that fires under MSYS2's `noacl`
+  mount) + `tmux.cmd` wrapper at zip root (sets `TMPDIR` before
+  exec for bare cmd.exe users). Linux/macOS builds unchanged.
+  See [issue #5](https://github.com/x-cmd-build/tmux/issues/5)
+  + `docs/windows-build-history.md`.
+- **v0.2.0** — Windows MSYS2 build (option A: MSYS shell + msys gcc).
+  5-platform matrix. `tmux.exe` + bundled `msys-2.0.dll` +
+  libevent/ncurses DLLs in a single zip. See
+  [issue #1](https://github.com/x-cmd-build/tmux/issues/1)
+  + `NOTICE.md` §Windows support.
+- **v0.1.0** — first release; 4-target matrix (Linux musl x2 +
+  macOS x2); based on upstream `tmux 3.7`. Windows deferred to
+  v0.2.0.
 
 ## Related
 

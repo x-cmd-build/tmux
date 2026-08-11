@@ -74,6 +74,28 @@ already does. See issue #1 for the full architectural discussion.
 **v0.1.0 limitation**: v0.1.0 did not ship a Windows build; users on
 Windows had to run tmux under WSL. v0.2.0 fixes this.
 
+**v0.2.1 patch**: fixes `no suitable socket path` failure on bare
+Windows. Two coordinated changes, both Windows-only (Linux/macOS
+untouched):
+
+1. `-DTMUX_SOCK_PERM=0` added to `scripts/build-msys2.sh`'s
+   configure CPPFLAGS. Disables tmux's chmod-based socket
+   directory permissions check (`tmux.c:225`). The check is
+   active by default for non-cygwin builds because
+   `Makefile.am:78-82`'s `if IS_CYGWIN` block doesn't fire
+   when `host_os=msys` → `PLATFORM=unknown`. MSYS2's `noacl`
+   mount silently drops `chmod 0700`, so the directory reports
+   `0755` and tmux refuses.
+2. `scripts/tmux.cmd` wrapper at the zip root (NOT in `bin/` —
+   `PATHEXT` precedence makes `tmux` resolve to `tmux.exe`
+   directly otherwise). Sets `TMPDIR=%USERPROFILE%\AppData\Local\Temp`
+   before exec'ing `bin\tmux.exe`, so `realpath()` in tmux's
+   `make_label()` has a working path even when the bundled
+   `msys-2.0.dll` has no `/etc/fstab`.
+
+See [issue #5](https://github.com/x-cmd-build/tmux/issues/5)
++ `docs/windows-build-history.md` for full analysis.
+
 ## Why this notice exists
 
 The wrapper license (BSD-3-Clause) covers the build/packaging

@@ -120,9 +120,20 @@ git archive --prefix=upstream/tmux/ <new-tag> | tar x
 
 ## 项目状态
 
-- **v0.1.0**（待定）—— 首次发布；4-target 矩阵（Linux musl x2 +
-  macOS x2）；基于上游 `tmux 3.7`。Windows 推迟到 v0.2.0（见
-  NOTICE.md）。
+- **v0.2.1** —— Windows "no suitable socket path" 修复。
+  `-DTMUX_SOCK_PERM=0` 编译标志（关掉 MSYS2 `noacl` mount 下
+  chmod 静默失效触发的 socket 目录权限检查）+ zip 根目录的
+  `tmux.cmd` 包装器（裸 cmd.exe 用户启动前设 `TMPDIR`）。
+  Linux/macOS 构建不变。详见
+  [issue #5](https://github.com/x-cmd-build/tmux/issues/5)
+  + `docs/windows-build-history.md`。
+- **v0.2.0** —— Windows MSYS2 构建（option A：MSYS shell + msys gcc）。
+  5 平台矩阵。`tmux.exe` + bundled `msys-2.0.dll` + libevent/ncurses
+  DLLs 装在同一个 zip 里。详见
+  [issue #1](https://github.com/x-cmd-build/tmux/issues/1)
+  + `NOTICE.md` §Windows support。
+- **v0.1.0** —— 首次发布；4-target 矩阵（Linux musl x2 + macOS x2）；
+  基于上游 `tmux 3.7`。Windows 推迟到 v0.2.0。
 
 ## 相关
 
