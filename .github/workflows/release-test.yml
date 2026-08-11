@@ -114,11 +114,14 @@ jobs:
         shell: bash
         working-directory: dist
         run: |
+          # Use shell tools that respect our CWD. PowerShell's
+          # Expand-Archive -DestinationPath . uses PowerShell's CWD,
+          # not the parent shell's, so we use bash's unzip on Windows
+          # (Git Bash ships unzip).
           if [ -f "tmux-${{ matrix.target }}.tar.xz" ]; then
             tar xJf "tmux-${{ matrix.target }}.tar.xz"
           else
-            # Windows zip — PowerShell Expand-Archive.
-            powershell -NoProfile -Command "Expand-Archive -Path 'tmux-${{ matrix.target }}.zip' -DestinationPath . -Force"
+            unzip -q -o "tmux-${{ matrix.target }}.zip"
           fi
           ls -la "tmux-${{ matrix.target }}/bin/"
 
