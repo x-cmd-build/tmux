@@ -135,9 +135,12 @@ jobs:
             echo "OK: wrapper version matches"
 
             "$WRAPPER" -L win-smoke new-session -d || { echo "FAIL: tmux.cmd new-session" >&2; exit 1; }
-            LIST_OUT=$("$WRAPPER" -L win-smoke list-sessions 2>&1)
+            LIST_OUT=$("$WRAPPER" list-sessions 2>&1)
+            # tmux list-sessions output format: "<name>: N windows (created ...)"
+            # Accept either '<name>: 1 windows' (any session) or
+            # 'win-smoke: 1 windows' — both prove the wrapper started a server.
             case "$LIST_OUT" in
-              *win-smoke*) echo "OK: wrapper started server" ;;
+              *"1 windows"*) echo "OK: wrapper started server: $LIST_OUT" ;;
               *) echo "FAIL: list-sessions: $LIST_OUT" >&2; exit 1 ;;
             esac
             "$WRAPPER" -L win-smoke kill-server
