@@ -84,10 +84,12 @@ jobs:
         shell: pwsh
         run: |
           $tmuxRoot = (Resolve-Path "tmux").Path
-          # Use the zip-root copy of the candidate wrapper — the wrapper's
-          # '%~dp0bin\tmux.exe' resolves relative to its own directory,
-          # so the wrapper must live adjacent to bin/ to find tmux.exe.
-          $candidateWrapper = Join-Path $tmuxRoot "tmux.cmd"
+          # Use the zip-root copy of the wrapper — its '%~dp0bin\tmux.exe'
+          # resolves relative to its own directory, so the wrapper must
+          # live adjacent to bin/ to find tmux.exe. (tmux.cmd.tmp-cmd
+          # is the second copy the bash test setup creates; we use it
+          # so we don't clobber any other file in the zip root.)
+          $candidateWrapper = Join-Path $tmuxRoot "tmux.cmd.tmp-cmd"
 
           # Remove bundled DLL so Win32 DLL search uses Git Bash's via PATH
           $dllBak = "$tmuxRoot\bin\msys-2.0.dll.bak"

@@ -72,18 +72,18 @@ sleep 1
 rm -rf "$HOME/.tmux-s"* "$TEMP/.tmux-s"* 2>/dev/null || true
 rm -rf "$USERPROFILE/.tmux-s"* 2>/dev/null || true
 
-# Locate v0.2.2 candidate wrapper from repo (workspace), copy into BOTH
+# Locate v0.2.2 wrapper from repo (workspace), copy into BOTH
 #   - TMUX_ROOT/scripts/ (for S10/S10b bash scenarios)
 #   - TMUX_ROOT/         (for S11 PowerShell scenarios; mimics real install at zip root)
 # The zip-root location matters because the wrapper uses %~dp0bin\tmux.exe
 # which resolves relative to the wrapper's directory.
-CANDIDATE_SRC="${GITHUB_WORKSPACE:-$(pwd)}/scripts/tmux-v022-candidate.cmd"
-CANDIDATE_DST_SCRIPTS="$TMUX_ROOT/scripts/tmux-v022-candidate.cmd"
-CANDIDATE_DST_ROOT="$TMUX_ROOT/tmux.cmd"
-if [ -f "$CANDIDATE_SRC" ]; then
+WRAPPER_SRC="${GITHUB_WORKSPACE:-$(pwd)}/scripts/tmux.cmd"
+WRAPPER_DST_SCRIPTS="$TMUX_ROOT/scripts/tmux.cmd"
+WRAPPER_DST_ROOT="$TMUX_ROOT/tmux.cmd.tmp-cmd"   # won't collide with above
+if [ -f "$WRAPPER_SRC" ]; then
     mkdir -p "$TMUX_ROOT/scripts"
-    [ -f "$CANDIDATE_DST_SCRIPTS" ] || cp "$CANDIDATE_SRC" "$CANDIDATE_DST_SCRIPTS"
-    [ -f "$CANDIDATE_DST_ROOT" ]    || cp "$CANDIDATE_SRC" "$CANDIDATE_DST_ROOT"
+    [ -f "$WRAPPER_DST_SCRIPTS" ] || cp "$WRAPPER_SRC" "$WRAPPER_DST_SCRIPTS"
+    [ -f "$WRAPPER_DST_ROOT" ]    || cp "$WRAPPER_SRC" "$WRAPPER_DST_ROOT"
 fi
 
 # Ensure tmux.exe + wrapper are on PATH
@@ -146,10 +146,10 @@ else
     record "S9-no-bundle-wrapper-enhanced" "SKIP" "GIT_BIN not detected"
 fi
 
-# === S10: v0.2.2 candidate wrapper (finds Git Bash via registry, injects PATH, exec tmux.exe) ===
+# === S10: v0.2.2 wrapper (finds Git Bash via registry, injects PATH, exec tmux.exe) ===
 #   This requires the wrapper file to exist + bundled DLL removed.
 #   Tests the proposed v0.2.2 design: no bundle + wrapper auto-injects Git Bash.
-if [ -f "$TMUX_ROOT/scripts/tmux-v022-candidate.cmd" ]; then
+if [ -f "$TMUX_ROOT/scripts/tmux.cmd" ]; then
     # Move DLL out of the way (so Win32 DLL search uses Git Bash via PATH)
     if [ -f "$TMUX_ROOT/bin/msys-2.0.dll" ]; then
         mv "$TMUX_ROOT/bin/msys-2.0.dll" "$TMUX_ROOT/bin/msys-2.0.dll.bak"
@@ -157,14 +157,14 @@ if [ -f "$TMUX_ROOT/scripts/tmux-v022-candidate.cmd" ]; then
 
     # Test from bash context (mimics user in Git Bash running the wrapper)
     run_scenario "S10-v022-wrapper-bash" \
-        "'$TMUX_ROOT/scripts/tmux-v022-candidate.cmd' -L s10 new-session -d && '$TMUX_ROOT/scripts/tmux-v022-candidate.cmd' -L s10 list-sessions && '$TMUX_ROOT/scripts/tmux-v022-candidate.cmd' -L s10 kill-server"
+        "'$TMUX_ROOT/scripts/tmux.cmd' -L s10 new-session -d && '$TMUX_ROOT/scripts/tmux.cmd' -L s10 list-sessions && '$TMUX_ROOT/scripts/tmux.cmd' -L s10 kill-server"
 
     # Test -S POSIX path with the v0.2.2 wrapper
     SOCK_S10="$HOME/.tmux-s10-test/default"
     rm -rf "$HOME/.tmux-s10-test" 2>/dev/null
     mkdir -p "$HOME/.tmux-s10-test" 2>/dev/null
     run_scenario "S10b-v022-wrapper-S-HOME" \
-        "'$TMUX_ROOT/scripts/tmux-v022-candidate.cmd' -S '$SOCK_S10' new-session -d && '$TMUX_ROOT/scripts/tmux-v022-candidate.cmd' -S '$SOCK_S10' list-sessions && '$TMUX_ROOT/scripts/tmux-v022-candidate.cmd' -S '$SOCK_S10' kill-server" \
+        "'$TMUX_ROOT/scripts/tmux.cmd' -S '$SOCK_S10' new-session -d && '$TMUX_ROOT/scripts/tmux.cmd' -S '$SOCK_S10' list-sessions && '$TMUX_ROOT/scripts/tmux.cmd' -S '$SOCK_S10' kill-server" \
         "rm -rf '$HOME/.tmux-s10-test'"
 
     # Restore bundle
@@ -172,7 +172,7 @@ if [ -f "$TMUX_ROOT/scripts/tmux-v022-candidate.cmd" ]; then
         mv "$TMUX_ROOT/bin/msys-2.0.dll.bak" "$TMUX_ROOT/bin/msys-2.0.dll"
     fi
 else
-    record "S10-v022-wrapper-bash" "SKIP" "candidate wrapper not found"
+    record "S10-v022-wrapper-bash" "SKIP" "v0.2.2 wrapper not found"
     record "S10b-v022-wrapper-S-HOME" "SKIP" "depends on S10"
 fi
 
