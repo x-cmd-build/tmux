@@ -73,6 +73,7 @@ jobs:
           echo "tag=${{ steps.tag.outputs.value }}"
 
       - name: Download release artifacts
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -87,6 +88,7 @@ jobs:
           ls -la
 
       - name: Verify SHA256SUMS entry
+        shell: bash
         working-directory: dist
         run: |
           if [ -f "tmux-${{ matrix.target }}.tar.xz" ]; then
@@ -139,10 +141,64 @@ jobs:
           $ARCH_BIN "$BIN" -V
 
           if [ "$TMUX_OS" = "windows" ]; then
-            # msys2 bash lacks a tty for pane rendering. Smoke is
-            # informational: verify the binary loads and version
-            # matches what we vendored (3.7b).
-            echo "OK: Windows smoke (version check only — no tty for pty-needing ops)"
+            # Windows smoke — verify v0.2.2+ wrapper works end-to-end.
+            # The runner has Git Bash (windows-latest image includes
+            # git-for-windows preinstalled), so the registry lookup
+            # in tmux.cmd should succeed.
+            #
+            # v0.2.2+ requires the wrapper for runtime DLL resolution
+            # (no bundled msys-2.0.dll). Verify:
+            #   1. tmux.exe -V loads and reports vendored version
+            #   2. tmux.cmd (zip root) is reachable
+            #   3. tmux.cmd -V invokes tmux.exe via the wrapper
+            #   4. tmux.cmd new-session -d starts a server (path-1 fix)
+            #   5. tmux.cmd list-sessions / kill-server cleanup
+            WRAPPER="dist/tmux-${{ matrix.target }}/tmux.cmd"
+            if [ ! -f "$WRAPPER" ]; then
+                echo "FAIL: $WRAPPER not found (v0.2.2+ requires wrapper at zip root)" >&2
+                exit 1
+            fi
+            if [ ! -f "$BIN" ]; then
+                echo "FAIL: $BIN not found" >&2
+                exit 1
+            fi
+            if [ -f "dist/tmux-${{ matrix.target }}/bin/msys-2.0.dll" ]; then
+                echo "FAIL: bundled msys-2.0.dll present (v0.2.2+ should NOT bundle it)" >&2
+                exit 1
+            fi
+
+            echo "==> tmux.exe -V (direct)"
+            "$BIN" -V
+            BIN_VER=$("$BIN" -V | head -1)
+
+            echo "==> tmux.cmd -V (via wrapper)"
+            "$WRAPPER" -V
+            WRAPPER_VER=$("$WRAPPER" -V | head -1)
+            if [ "$BIN_VER" != "$WRAPPER_VER" ]; then
+                echo "FAIL: wrapper version mismatch: direct='$BIN_VER' wrapper='$WRAPPER_VER'" >&2
+                exit 1
+            fi
+            echo "OK: wrapper reports same version as direct invocation"
+
+            echo "==> tmux.cmd -L win-smoke new-session -d"
+            "$WRAPPER" -L win-smoke new-session -d
+            WRAPPER_EXIT=$?
+            if [ "$WRAPPER_EXIT" -ne 0 ]; then
+                echo "FAIL: tmux.cmd new-session exited $WRAPPER_EXIT" >&2
+                exit 1
+            fi
+
+            echo "==> tmux.cmd -L win-smoke list-sessions"
+            LIST_OUT=$("$WRAPPER" -L win-smoke list-sessions 2>&1)
+            echo "$LIST_OUT"
+            case "$LIST_OUT" in
+              *win-smoke*) echo "OK: wrapper successfully started server" ;;
+              *) echo "FAIL: list-sessions did not return expected session" >&2; exit 1 ;;
+            esac
+
+            echo "==> tmux.cmd -L win-smoke kill-server"
+            "$WRAPPER" -L win-smoke kill-server
+            echo "OK: Windows smoke (v0.2.2 wrapper end-to-end)"
             exit 0
           fi
 
