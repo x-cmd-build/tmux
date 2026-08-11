@@ -67,7 +67,7 @@ JOBS="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)"
 echo "==> autoreconf -fi (PKGBUILD's autogen.sh equivalent)"
 ( cd "$SRC" && autoreconf -fi )
 
-# ---- PKGBUILD build()  (VERBATIM configure flags) ----
+# ---- PKGBUILD build()  (VERBATIM configure flags + v0.2.1 fix) ----
 # PKGBUILD:
 #   ./configure --build=${CHOST} --enable-sixel
 #               --prefix=/usr --sysconfdir=/etc --localstatedir=/var
@@ -79,9 +79,17 @@ echo "==> autoreconf -fi (PKGBUILD's autogen.sh equivalent)"
 # (it sets a default _XOPEN_SOURCE=500 in some headers). We
 # explicitly undefine it so the AC_EGREP_CPP in configure.ac
 # (line 605-617) finds CMSG_DATA and passes.
-echo "==> configure (PKGBUILD verbatim)"
+#
+# v0.2.1 fix: -DTMUX_SOCK_PERM=0 disables the chmod-based socket
+# directory permissions check in tmux.c:225. Without this flag,
+# MSYS2's default `noacl` mount mode silently drops `chmod 0700`,
+# and tmux refuses to use the socket dir with "directory %s has
+# unsafe permissions". See issue #5 + docs/windows-build-history.md.
+# Windows-only; does not affect Linux/macOS builds (those use
+# scripts/build.sh's linux/darwin branches which are unchanged).
+echo "==> configure (PKGBUILD verbatim + -DTMUX_SOCK_PERM=0)"
 ( cd "$SRC" && \
-	CPPFLAGS="${CPPFLAGS:-} -I/usr/include/ncursesw -U_XOPEN_SOURCE" \
+	CPPFLAGS="${CPPFLAGS:-} -I/usr/include/ncursesw -U_XOPEN_SOURCE -DTMUX_SOCK_PERM=0" \
 		./configure \
 			--build="${CHOST:-x86_64-pc-msys}" \
 			--enable-sixel \

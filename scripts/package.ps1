@@ -73,6 +73,17 @@ Copy-Item (Join-Path $root 'NOTICE.md')   (Join-Path $outDir 'NOTICE.md')
 Copy-Item (Join-Path $root 'README.md')   (Join-Path $outDir 'README.md')
 Copy-Item (Join-Path $root 'README.cn.md') (Join-Path $outDir 'README.cn.md')
 
+# 5. tmux.cmd wrapper (Windows only). Placed at zip root, NOT in bin/:
+#    PATHEXT precedence (.EXE > .CMD) means `tmux` resolves to tmux.exe
+#    directly if both are co-located. Users add the zip root to PATH so
+#    `tmux` invokes this wrapper, which sets TMPDIR and execs bin\tmux.exe.
+$wrapperSrc = Join-Path $root 'scripts/tmux.cmd'
+if (Test-Path $wrapperSrc) {
+    Copy-Item $wrapperSrc (Join-Path $outDir 'tmux.cmd')
+} else {
+    Write-Warning "WARN: $wrapperSrc not found - skipping tmux.cmd wrapper"
+}
+
 # 5. Zip it up
 $zipPath = Join-Path $root "dist/tmux-$target.zip"
 if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
