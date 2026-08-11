@@ -72,6 +72,15 @@ sleep 1
 rm -rf "$HOME/.tmux-s"* "$TEMP/.tmux-s"* 2>/dev/null || true
 rm -rf "$USERPROFILE/.tmux-s"* 2>/dev/null || true
 
+# Locate v0.2.2 candidate wrapper from repo (workspace), copy into TMUX_ROOT/scripts
+# so the rest of the test can reference it uniformly.
+CANDIDATE_SRC="${GITHUB_WORKSPACE:-$(pwd)}/scripts/tmux-v022-candidate.cmd"
+CANDIDATE_DST="$TMUX_ROOT/scripts/tmux-v022-candidate.cmd"
+if [ -f "$CANDIDATE_SRC" ] && [ ! -f "$CANDIDATE_DST" ]; then
+    mkdir -p "$TMUX_ROOT/scripts"
+    cp "$CANDIDATE_SRC" "$CANDIDATE_DST"
+fi
+
 # Ensure tmux.exe + wrapper are on PATH
 export PATH="$TMUX_ROOT/bin:$PATH"
 # Clear any stale TMUX env var
