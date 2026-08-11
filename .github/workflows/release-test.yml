@@ -132,11 +132,13 @@ jobs:
             # (backslash) as a subdir name (PowerShell Compress-Archive
             # default). Use 'unzip -j' (junk paths) so 'bin	mux.exe'
             # extracts as just 'tmux.exe' into a target dir we choose.
-            mkdir -p "tmux-${{ matrix.target }}/bin" "tmux-${{ matrix.target }}/man/man1"
-            ENTRIES=$(unzip -Z -1 "../tmux-${{ matrix.target }}.zip" 2>/dev/null)
-            echo "==> zip entry count: $(echo "$ENTRIES" | wc -l)"
-            echo "==> first 3 entries:"
-            echo "$ENTRIES" | head -3
+            # Use 'unzip -l' to list entries (more portable than -Z which
+            # some unzips don't support). Strip the metadata header
+            # (3 lines: Archive, Length, ---).
+            unzip -l "../tmux-${{ matrix.target }}.zip" 2>/dev/null \
+                | awk 'NF >= 4 && /^[ 0-9]/ {print $NF}' \
+                | tail -n +1 > /tmp/zip-entries.txt
+            echo "==> zip entry count: $(wc -l < /tmp/zip-entries.txt)"
             while IFS= read -r entry; do
                 [ -z "$entry" ] && continue
                 case "$entry" in
@@ -146,9 +148,7 @@ jobs:
                 esac
                 mkdir -p "$target"
                 unzip -j -q -o "../tmux-${{ matrix.target }}.zip" "$entry" -d "$target" 2>/dev/null || true
-            done <<< "$ENTRIES"
-            echo "==> post-extract layout:"
-            find "tmux-${{ matrix.target }}" -maxdepth 2 -type d
+            done < /tmp/zip-entries.txt
             echo "==> bin/ contents:"
             ls -la "tmux-${{ matrix.target }}/bin/" | head -10
 
