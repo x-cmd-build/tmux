@@ -91,10 +91,10 @@ run_scenario "S1-sanity" \
     "'$TMUX_ROOT/bin/tmux.exe' -V"
 
 # === S2: Basic new-session with TMPDIR set (mimics what tmux.cmd does) ===
-# Use env-var-prefix on run_scenario (not eval inside) — avoids quoting bugs
+# Use env-var-prefix BEFORE the function call (not as 3rd arg)
+TMPDIR="$USERPROFILE/AppData/Local/Temp" \
 run_scenario "S2-new-session-TMPDIR-set" \
-    "echo ENV: TMPDIR=${TMPDIR:-unset} HOME=${HOME:-unset}; '$TMUX_ROOT/bin/tmux.exe' -L s2 new-session -d && '$TMUX_ROOT/bin/tmux.exe' -L s2 list-sessions && '$TMUX_ROOT/bin/tmux.exe' -L s2 kill-server" \
-TMPDIR="$USERPROFILE/AppData/Local/Temp"
+    "echo ENV: TMPDIR=${TMPDIR:-unset} HOME=${HOME:-unset}; '$TMUX_ROOT/bin/tmux.exe' -L s2 new-session -d && '$TMUX_ROOT/bin/tmux.exe' -L s2 list-sessions && '$TMUX_ROOT/bin/tmux.exe' -L s2 kill-server"
 
 # === S3: tmux.cmd wrapper (current v0.2.1 design) ===
 run_scenario "S3-tmux-cmd-wrapper" \
