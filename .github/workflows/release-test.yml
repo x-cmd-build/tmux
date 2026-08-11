@@ -128,6 +128,12 @@ jobs:
             # The Linux/macOS tarball has a 'tmux-<target>/' prefix
             # — we normalize both to that layout here.
             mkdir -p "tmux-${{ matrix.target }}"
+            echo "==> workspace top:"
+            ls -la ..
+            echo "==> scripts dir:"
+            ls -la ../scripts/ 2>&1 || echo "NO SCRIPTS DIR"
+            echo "==> extract-zip.py exists?"
+            test -f ../scripts/extract-zip.py && echo "YES" || echo "NO"
             python "../scripts/extract-zip.py" \
               "tmux-${{ matrix.target }}.zip" "tmux-${{ matrix.target }}"
           fi
