@@ -109,13 +109,16 @@ jobs:
           )
           # The zip's 'bin\' (backslash) entries were extracted as
           # a literal 'bin\' subdir. We also have an empty 'bin/' from
-          # the zip's directory entry. Merge: rename 'bin\' to 'bin_x',
-          # move its contents into 'bin/', then drop bin_x.
-          $backDirX = Join-Path $dst 'bin_x'
+          # the zip's directory entry. Merge: use cmd.exe's ren (which
+          # handles backslash paths; PowerShell's Rename-Item treats
+          # paths ending in backslash as device names and fails).
           $oldBin = Join-Path $dst ('bin' + [char]92)
+          $backDirX = Join-Path $dst 'bin_x'
           $newBin = Join-Path $dst ('bin' + [char]92)
           if (Test-Path $oldBin) {
-              Rename-Item $oldBin $backDirX -Force
+              # Use cmd.exe ren to avoid PowerShell's device-name
+              # interpretation of trailing backslashes.
+              & cmd /c ren ("$dst\bin\\") bin_x | Out-Null
               if (Test-Path $backDirX) {
                   Get-ChildItem -Path $backDirX -Force | ForEach-Object {
                       Move-Item -Path $_.FullName -Destination $newBin -Force
