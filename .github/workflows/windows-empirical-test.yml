@@ -1,0 +1,77 @@
+name: windows-empirical-test
+
+# Empirical Windows tmux behavior validation.
+#
+# Why this workflow exists:
+#   Discussions about Windows tmux behavior (DLL isolation, mount tables,
+#   -S flag handling, wrapper design) have been speculative. This
+#   workflow runs REAL scenarios on a real Windows runner with bash
+#   (Git Bash) available, so design decisions are based on measured
+#   data, not theory.
+#
+# Triggers: workflow_dispatch only (per dispatch-only CI policy).
+# No push / pull_request triggers.
+#
+# What it does:
+#   1. Detect Git Bash install on the runner.
+#   2. Download v0.2.1's tmux-x86_64-windows.zip from GitHub Releases.
+#   3. Run a battery of scenarios covering:
+#      - Basic startup (sanity)
+#      - new-session with TMPDIR set (mimics wrapper)
+#      - tmux.cmd wrapper (current v0.2.1 design)
+#      - -S with Windows path (expected to work)
+#      - -S with HOME POSIX path (expected to FAIL with bundled DLL)
+#      - Bundle DLL deleted + Git Bash on Win32 PATH (Option B hypothesis)
+#      - -S with HOME POSIX path under Option B (expected to work)
+#      - Basic new-session under Option B (sanity for Option B)
+#   4. Aggregate pass/fail/skip to $GITHUB_STEP_SUMMARY.
+#
+# Dispatch: `gh workflow run windows-empirical-test`
+#
+# Iterate: each run reveals which hypotheses are wrong; adjust scenarios
+# or designs based on what actually fails, not what theory predicts.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  empirical:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect Git Bash on runner
+        shell: pwsh
+        run: |
+          $bash = Get-Command bash -ErrorAction SilentlyContinue
+          if ($bash) {
+            # bash.exe is in <git_root>\usr\bin. Walk up two levels.
+            $binDir = Split-Path $bash.Source -Parent
+            $gitRoot = Split-Path $binDir -Parent
+            $gitBin = "$gitRoot\usr\bin"
+            "## Git Bash detected" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+            "- bash: $($bash.Source)" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+            "- git bin: $gitBin" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+            "GIT_BIN=$gitBin" | Out-File -Encoding ascii -Append $env:GITHUB_ENV
+          } else {
+            "## Git Bash NOT FOUND on runner" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+            Write-Warning "Git Bash not found; scenarios that depend on it will SKIP"
+          }
+
+      - name: Download v0.2.1 zip
+        shell: pwsh
+        run: |
+          $url = "https://github.com/x-cmd-build/tmux/releases/download/v0.2.1/tmux-x86_64-windows.zip"
+          Invoke-WebRequest -Uri $url -OutFile "tmux.zip"
+          Expand-Archive -Path "tmux.zip" -DestinationPath "tmux" -Force
+          Write-Output "Extracted v0.2.1 zip:"
+          Get-ChildItem "tmux" -Recurse | Select-Object FullName | Format-Table -HideTableHeaders
+
+      - name: Run empirical test scenarios
+        shell: bash
+        run: bash scripts/windows-empirical-test.sh
