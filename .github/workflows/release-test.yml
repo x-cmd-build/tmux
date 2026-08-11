@@ -128,7 +128,7 @@ jobs:
             # The Linux/macOS tarball has a 'tmux-<target>/' prefix
             # — we normalize both to that layout here.
             mkdir -p "tmux-${{ matrix.target }}"
-            python "$GITHUB_WORKSPACE/scripts/extract-zip.py" \
+            python "../scripts/extract-zip.py" \
               "tmux-${{ matrix.target }}.zip" "tmux-${{ matrix.target }}"
           fi
           ls -la "tmux-${{ matrix.target }}/bin/"
