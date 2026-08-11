@@ -128,13 +128,19 @@ jobs:
             # The Linux/macOS tarball has a 'tmux-<target>/' prefix
             # — we normalize both to that layout here.
             mkdir -p "tmux-${{ matrix.target }}"
-            echo "==> workspace top:"
-            ls -la ..
-            echo "==> scripts dir:"
-            ls -la ../scripts/ 2>&1 || echo "NO SCRIPTS DIR"
-            echo "==> extract-zip.py exists?"
-            test -f ../scripts/extract-zip.py && echo "YES" || echo "NO"
-            python "../scripts/extract-zip.py" \
+            echo "==> pwd: $(pwd)"
+            echo "==> GITHUB_WORKSPACE: $GITHUB_WORKSPACE"
+            echo "==> \$RUNNER_TEMP: $RUNNER_TEMP"
+            # Use absolute path. GITHUB_WORKSPACE on Windows is backslash-
+            # separated; use cygpath to normalize.
+            if [ -n "$GITHUB_WORKSPACE" ]; then
+                WS=$(cygpath -u "$GITHUB_WORKSPACE" 2>/dev/null || echo "$GITHUB_WORKSPACE")
+                SCRIPT="$WS/scripts/extract-zip.py"
+                echo "==> using absolute script path: $SCRIPT"
+            else
+                SCRIPT="scripts/extract-zip.py"
+            fi
+            python "$SCRIPT" \
               "tmux-${{ matrix.target }}.zip" "tmux-${{ matrix.target }}"
           fi
           ls -la "tmux-${{ matrix.target }}/bin/"
