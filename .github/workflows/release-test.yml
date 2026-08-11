@@ -132,9 +132,16 @@ jobs:
             cd "tmux-${{ matrix.target }}"
             unzip -q -b -o "../tmux-${{ matrix.target }}.zip" 2>&1 || true
             cd ..
-            # backslash paths extracted as 'bin\\\\' — convert to 'bin/'
+            # The zip uses 'bin\' (backslash) as a directory name.
+            # After unzip -b, entries land in 'bin\' as a literal
+            # subdir. We also have an empty 'bin/' from the dir entry.
+            # Merge: rename 'bin\' to 'bin_x', move contents into
+            # 'bin/', then drop bin_x.
             if [ -d "tmux-${{ matrix.target }}/bin\\" ]; then
-                mv "tmux-${{ matrix.target }}/bin\\" "tmux-${{ matrix.target }}/bin"
+                mv "tmux-${{ matrix.target }}/bin\\" "tmux-${{ matrix.target }}/bin_x"
+                find "tmux-${{ matrix.target }}/bin_x" -mindepth 1 -maxdepth 1 \
+                    -exec mv {} "tmux-${{ matrix.target }}/bin/" \;
+                rm -rf "tmux-${{ matrix.target }}/bin_x"
             fi
           fi
           ls -la "tmux-${{ matrix.target }}/bin/"
