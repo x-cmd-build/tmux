@@ -120,29 +120,16 @@ jobs:
             # Windows zip created by PowerShell's Compress-Archive
             # uses backslash path separators. unzip refuses them
             # with 'appears to use backslashes as path separators'.
-            # Python's zipfile module normalizes backslashes.
+            # Python's zipfile module normalizes backslashes; see
+            # scripts/extract-zip.py.
             #
             # Also, this zip has NO top-level dir prefix (entries
             # are 'bin/', 'tmux.cmd', 'LICENSE' at the root).
             # The Linux/macOS tarball has a 'tmux-<target>/' prefix
             # — we normalize both to that layout here.
             mkdir -p "tmux-${{ matrix.target }}"
-            python -c "
-import zipfile, os
-src = 'tmux-${{ matrix.target }}.zip'
-dst = 'tmux-${{ matrix.target }}'
-with zipfile.ZipFile(src) as z:
-    for name in z.namelist():
-        # Normalize backslashes to forward slashes
-        n = name.replace('\\\\', '/')
-        if n.endswith('/'):
-            os.makedirs(os.path.join(dst, n), exist_ok=True)
-        else:
-            target = os.path.join(dst, n)
-            os.makedirs(os.path.dirname(target), exist_ok=True)
-            with z.open(name) as src_f, open(target, 'wb') as dst_f:
-                dst_f.write(src_f.read())
-"
+            python "$GITHUB_WORKSPACE/scripts/extract-zip.py" \
+              "tmux-${{ matrix.target }}.zip" "tmux-${{ matrix.target }}"
           fi
           ls -la "tmux-${{ matrix.target }}/bin/"
 
