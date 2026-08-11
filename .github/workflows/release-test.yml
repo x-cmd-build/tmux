@@ -123,28 +123,30 @@ jobs:
             # Windows zip created by PowerShell's Compress-Archive
             # uses backslash path separators. unzip refuses them
             # with 'appears to use backslashes as path separators'.
-            # Python's zipfile module normalizes backslashes; see
-            # scripts/extract-zip.py.
+            # Python's zipfile module normalizes backslashes; the
+            # script content is inlined here because the actions/checkout
+            # for windows-latest+windows-2025-vs2026 was observed
+            # to NOT include scripts/ in the workspace tree.
             #
             # Also, this zip has NO top-level dir prefix (entries
             # are 'bin/', 'tmux.cmd', 'LICENSE' at the root).
             # The Linux/macOS tarball has a 'tmux-<target>/' prefix
             # — we normalize both to that layout here.
             mkdir -p "tmux-${{ matrix.target }}"
-            echo "==> pwd: $(pwd)"
-            echo "==> GITHUB_WORKSPACE: $GITHUB_WORKSPACE"
-            echo "==> \$RUNNER_TEMP: $RUNNER_TEMP"
-            # Use absolute path. GITHUB_WORKSPACE on Windows is backslash-
-            # separated; use cygpath to normalize.
-            if [ -n "$GITHUB_WORKSPACE" ]; then
-                WS=$(cygpath -u "$GITHUB_WORKSPACE" 2>/dev/null || echo "$GITHUB_WORKSPACE")
-                SCRIPT="$WS/scripts/extract-zip.py"
-                echo "==> using absolute script path: $SCRIPT"
-            else
-                SCRIPT="scripts/extract-zip.py"
-            fi
-            python "$SCRIPT" \
-              "tmux-${{ matrix.target }}.zip" "tmux-${{ matrix.target }}"
+            python -c "
+import sys, os, zipfile
+src, dst = sys.argv[1], sys.argv[2]
+with zipfile.ZipFile(src) as z:
+    for name in z.namelist():
+        n = name.replace('\\\\', '/')
+        if n.endswith('/'):
+            os.makedirs(os.path.join(dst, n), exist_ok=True)
+        else:
+            target = os.path.join(dst, n)
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            with z.open(name) as src_f, open(target, 'wb') as dst_f:
+                dst_f.write(src_f.read())
+" "tmux-${{ matrix.target }}.zip" "tmux-${{ matrix.target }}"
           fi
           ls -la "tmux-${{ matrix.target }}/bin/"
 
